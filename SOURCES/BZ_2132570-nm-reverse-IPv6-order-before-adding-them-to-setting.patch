@@ -1,0 +1,31 @@
+From 248cd0bff6e3d030ee72b62a8a8b0e37e9f2ef80 Mon Sep 17 00:00:00 2001
+From: Fernando Fernandez Mancera <ffmancera@riseup.net>
+Date: Tue, 29 Nov 2022 23:56:13 +0100
+Subject: [PATCH] nm: reverse IPv6 order before adding them to setting
+
+This is a downstream patch that needs to be applied before any other
+patch. Please check:
+
+https://github.com/nmstate/nmstate/commit/2d0cfd5ad8e049f30cad10d977a5fae8bc4e6b64
+
+Signed-off-by: Fernando Fernandez Mancera <ffmancera@riseup.net>
+---
+ libnmstate/nm/ipv6.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libnmstate/nm/ipv6.py b/libnmstate/nm/ipv6.py
+index 8e01fd70..7eb3196c 100644
+--- a/libnmstate/nm/ipv6.py
++++ b/libnmstate/nm/ipv6.py
+@@ -157,7 +157,7 @@ def _set_dynamic(setting_ip, is_dhcp, is_autoconf):
+ 
+ 
+ def _set_static(setting_ip, ip_addresses):
+-    for address in ip_addresses:
++    for address in reversed(ip_addresses):
+         if iplib.is_ipv6_link_local_addr(
+             address[InterfaceIPv6.ADDRESS_IP],
+             address[InterfaceIPv6.ADDRESS_PREFIX_LENGTH],
+-- 
+2.38.1
+

@@ -1,0 +1,183 @@
+0001-covscan-Remove-dead-code.patch
+0002-Run-cargo-clippy.patch
+0003-ip-Support-static-route-with-auto-ip.patch
+0004-test-Refresh-the-expired-CA-keys.patch
+From 6ea4790a368260b43c207d19f20c728698ac2184 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 25 Apr 2023 14:52:59 +0800
+Subject: [PATCH 1/4] covscan: Remove dead code
+
+Removing the dead code found by covscan.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/dns.py | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/libnmstate/dns.py b/libnmstate/dns.py
+index 853ece80..043c74a5 100644
+--- a/libnmstate/dns.py
++++ b/libnmstate/dns.py
+@@ -173,7 +173,6 @@ class DnsState:
+                     },
+                 },
+             }
+-        return {}
+ 
+     def _find_ifaces_for_name_servers(
+         self, ifaces, route_state, ignored_dns_ifaces
+-- 
+2.40.1
+
+
+From 0329b87b7856e244a4a2d34864a6e6eefa49b226 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Fri, 19 May 2023 17:57:51 +0800
+Subject: [PATCH 2/4] Run cargo clippy
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ rust/src/lib/nispor/linux_bridge.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rust/src/lib/nispor/linux_bridge.rs b/rust/src/lib/nispor/linux_bridge.rs
+index c03f03d6..c4cd104b 100644
+--- a/rust/src/lib/nispor/linux_bridge.rs
++++ b/rust/src/lib/nispor/linux_bridge.rs
+@@ -63,7 +63,7 @@ pub(crate) fn append_bridge_port_config(
+         port_confs.push(port_conf);
+     }
+ 
+-    if let Some(mut br_conf) = br_iface.bridge.as_mut() {
++    if let Some(br_conf) = br_iface.bridge.as_mut() {
+         br_conf.port = Some(port_confs);
+     }
+ }
+-- 
+2.40.1
+
+
+From 7c80a3acdb67eb09c3dcbeee7138315b3f855c7f Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Fri, 19 May 2023 18:12:54 +0800
+Subject: [PATCH 3/4] ip: Support static route with auto ip
+
+Supporting assigning static route to interface with auto ip. For
+example:
+
+```yml
+---
+interfaces:
+  - name: eth1
+    type: ethernet
+    state: up
+    ipv4:
+      dhcp: true
+      enabled: true
+    ipv6:
+      dhcp: true
+      autoconf: true
+      enabled: true
+routes:
+  config:
+  - destination: 198.51.100.0/24
+    metric: 150
+    next-hop-address: 192.0.2.1
+    next-hop-interface: eth1
+    table-id: 254
+  - destination: 2001:db8:2::/64
+    metric: 151
+    next-hop-address: 2001:db8:1::2
+    next-hop-interface: eth1
+```
+
+Integration test case included and been marked as tier1.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/route.py                  |  52 ++++++-------
+ tests/integration/dynamic_ip_test.py | 105 +++++++++++++++++++--------
+ tests/lib/route_test.py              |  28 +------
+ 3 files changed, 105 insertions(+), 80 deletions(-)
+
+diff --git a/libnmstate/route.py b/libnmstate/route.py
+index d3734279..c92cbbb6 100644
+--- a/libnmstate/route.py
++++ b/libnmstate/route.py
+@@ -1,21 +1,4 @@
+-#
+-# Copyright (c) 2020 Red Hat, Inc.
+-#
+-# This file is part of nmstate
+-#
+-# This program is free software: you can redistribute it and/or modify
+-# it under the terms of the GNU Lesser General Public License as published by
+-# the Free Software Foundation, either version 2.1 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU Lesser General Public License for more details.
+-#
+-# You should have received a copy of the GNU Lesser General Public License
+-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+-#
++# SPDX-License-Identifier: LGPL-2.1-or-later
+ 
+ from collections import defaultdict
+ import logging
+@@ -146,13 +129,6 @@ class RouteEntry(StateEntry):
+                 f"Route {self.to_dict()} next hop to down/absent interface"
+             )
+             return False
+-        if iface.is_dynamic(
+-            Interface.IPV6 if self.is_ipv6 else Interface.IPV4
+-        ):
+-            self._invalid_reason = (
+-                f"Route {self.to_dict()} next hop to interface with dynamic IP"
+-            )
+-            return False
+         if self.is_ipv6:
+             if not iface.is_ipv6_enabled():
+                 self._invalid_reason = (
+@@ -194,7 +170,10 @@ class RouteState:
+                 rt = RouteEntry(entry)
+                 self._cur_routes[rt.next_hop_interface].add(rt)
+                 if not ifaces or rt.is_valid(ifaces):
+-                    self._routes[rt.next_hop_interface].add(rt)
++                    # When user converting static IP to auto IP, we should
++                    # not merge current static routes besides desired ones.
++                    if not iface_switch_from_static_to_auto_ip(ifaces, rt):
++                        self._routes[rt.next_hop_interface].add(rt)
+                 else:
+                     logging.debug(
+                         f"The current route {entry} has been discarded due"
+@@ -299,3 +278,24 @@ class RouteState:
+                         {Route.KEY: {Route.CONFIG: cur_routes_info}},
+                     )
+                 )
++
++
++def iface_switch_from_static_to_auto_ip(ifaces, rt):
++    iface_name = rt.next_hop_interface
++    if not iface_name or not ifaces:
++        return False
++
++    if is_ipv6_address(rt.destination):
++        family = Interface.IPV6
++    else:
++        family = Interface.IPV4
++
++    cur_iface = ifaces.get_cur_iface(iface_name, None)
++    des_iface = ifaces.get_iface(iface_name, None)
++    if (
++        cur_iface
++        and des_iface
++        and not cur_iface.is_dynamic(family)
++        and des_iface.is_dynamic(family)
++    ):
++        return True
+-- 
+2.40.1
+
