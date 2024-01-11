@@ -1,7 +1,66 @@
+0001-covscan-Remove-dead-code.patch
+0002-Run-cargo-clippy.patch
+0003-ip-Support-static-route-with-auto-ip.patch
+0004-test-Refresh-the-expired-CA-keys.patch
+From 6ea4790a368260b43c207d19f20c728698ac2184 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 25 Apr 2023 14:52:59 +0800
+Subject: [PATCH 1/4] covscan: Remove dead code
+
+Removing the dead code found by covscan.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/dns.py | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/libnmstate/dns.py b/libnmstate/dns.py
+index 853ece80..043c74a5 100644
+--- a/libnmstate/dns.py
++++ b/libnmstate/dns.py
+@@ -173,7 +173,6 @@ class DnsState:
+                     },
+                 },
+             }
+-        return {}
+ 
+     def _find_ifaces_for_name_servers(
+         self, ifaces, route_state, ignored_dns_ifaces
+-- 
+2.40.1
+
+
+From 0329b87b7856e244a4a2d34864a6e6eefa49b226 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Fri, 19 May 2023 17:57:51 +0800
+Subject: [PATCH 2/4] Run cargo clippy
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ rust/src/lib/nispor/linux_bridge.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rust/src/lib/nispor/linux_bridge.rs b/rust/src/lib/nispor/linux_bridge.rs
+index c03f03d6..c4cd104b 100644
+--- a/rust/src/lib/nispor/linux_bridge.rs
++++ b/rust/src/lib/nispor/linux_bridge.rs
+@@ -63,7 +63,7 @@ pub(crate) fn append_bridge_port_config(
+         port_confs.push(port_conf);
+     }
+ 
+-    if let Some(mut br_conf) = br_iface.bridge.as_mut() {
++    if let Some(br_conf) = br_iface.bridge.as_mut() {
+         br_conf.port = Some(port_confs);
+     }
+ }
+-- 
+2.40.1
+
+
 From 7c80a3acdb67eb09c3dcbeee7138315b3f855c7f Mon Sep 17 00:00:00 2001
 From: Gris Ge <fge@redhat.com>
 Date: Fri, 19 May 2023 18:12:54 +0800
-Subject: [PATCH] ip: Support static route with auto ip
+Subject: [PATCH 3/4] ip: Support static route with auto ip
 
 Supporting assigning static route to interface with auto ip. For
 example:
@@ -36,8 +95,10 @@ Integration test case included and been marked as tier1.
 
 Signed-off-by: Gris Ge <fge@redhat.com>
 ---
- libnmstate/route.py | 52 ++++++++++++++++++++++-----------------------
- 1 file changed, 26 insertions(+), 26 deletions(-)
+ libnmstate/route.py                  |  52 ++++++-------
+ tests/integration/dynamic_ip_test.py | 105 +++++++++++++++++++--------
+ tests/lib/route_test.py              |  28 +------
+ 3 files changed, 105 insertions(+), 80 deletions(-)
 
 diff --git a/libnmstate/route.py b/libnmstate/route.py
 index d3734279..c92cbbb6 100644
@@ -118,5 +179,5 @@ index d3734279..c92cbbb6 100644
 +    ):
 +        return True
 -- 
-2.41.0
+2.40.1
 

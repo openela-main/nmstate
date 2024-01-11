@@ -4,7 +4,7 @@
 
 Name:           nmstate
 Version:        1.4.4
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -14,7 +14,7 @@ Source2:        https://www.nmstate.io/nmstate.gpg
 Source3:        %{url}/releases/download/v%{version}/%{srcname}-vendor-%{version}.tar.xz
 # Patches 0X are reserved to downstream only
 Patch0:         BZ_2132570-nm-reverse-IPv6-order-before-adding-them-to-setting.patch
-Patch10:        BZ_2213554-ip-Support-static-route-with-auto-ip.patch
+Patch1:         BZ_2203277-ip-Support-static-route-with-auto-ip.patch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -149,14 +149,17 @@ popd
 /sbin/ldconfig
 
 %changelog
-* Mon Jun 12 2023 Gris Ge <fge@redhat.com> - 1.4.4-2
-- Support static route with auto ip. RHBZ#2213554
+* Tue May 30 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 1.4.4-3
+- Support static route with auto-ip. RHBZ#2203277
 
-* Mon Apr 24 2023 Gris Ge <fge@redhat.com> - 1.4.4-1
-- Upgrade to 1.4.4. RHBZ#2186178
+* Mon Apr 24 2023 Gris Ge <fge@redhat.com> - 1.4.4-2
+- Enable CI gating.
 
-* Thu Mar 30 2023 Gris Ge <fge@redhat.com> - 1.4.3-1
-- Upgrade to 1.4.3. RHBZ#2181166
+* Sun Apr 23 2023 Gris Ge <fge@redhat.com> - 1.4.4-1
+- Upgrade to nmstate 1.4.4
+
+* Wed Mar 29 2023 Gris Ge <fge@redhat.com> - 1.4.3-1
+- Upgrade to nmstate 1.4.3. RHBZ#2179899
 
 * Mon Feb 27 2023 Gris Ge <fge@redhat.com> - 1.4.2-4
 - Ignore undesired iface config. RHBZ#2160416
