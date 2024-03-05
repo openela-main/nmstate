@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        1.4.4
-Release:        3%{?dist}
+Version:        1.4.5
+Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -14,7 +14,7 @@ Source2:        https://www.nmstate.io/nmstate.gpg
 Source3:        %{url}/releases/download/v%{version}/%{srcname}-vendor-%{version}.tar.xz
 # Patches 0X are reserved to downstream only
 Patch0:         BZ_2132570-nm-reverse-IPv6-order-before-adding-them-to-setting.patch
-Patch1:         BZ_2203277-ip-Support-static-route-with-auto-ip.patch
+Patch10:        RHEL-13992-dns-opt-fix.patch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -149,6 +149,18 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Wed Nov 15 2023 Gris Ge <fge@redhat.com> - 1.4.5-2
+- Fix use case on purging DNS option. RHEL-13992
+
+* Tue Nov 07 2023 Gris Ge <fge@redhat.com> - 1.4.5-1
+- Support DNS option. RHEL-13992
+
+* Fri Oct 06 2023 Wen Liang <wenliang@redhat.com> - 1.4.4-5
+- Support treating string as int for address prefix-length. RHEL-11660
+
+* Wed Aug 30 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 1.4.4-4
+- Fix issue with ovs-bridge and ovs-interface with same name. RHBZ#2231843
+
 * Tue May 30 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 1.4.4-3
 - Support static route with auto-ip. RHBZ#2203277
 

@@ -1,0 +1,157 @@
+From c95e26154cfe105faedb6fe6187e89da658e6d02 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 14 Nov 2023 16:08:35 +0800
+Subject: [PATCH 1/2] dns: Fix DNS option `ndots`, `timeout` and `attempts`
+
+The `ndots`, `timeout` and `attempts` DNS options are allowed to
+hold a integer value in the format of `<opt_name>:<int>`. Previously,
+nmstate is treating them as invalid DNS option. This patch fix it.
+
+Now this YAML is supported:
+
+```yml
+dns-resolver:
+  config:
+    options:
+    - rotate
+    - ndots:9
+```
+
+Integration test cases included.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/dns.py | 31 ++++++++++++++++++++++++-------
+ 1 file changed, 24 insertions(+), 7 deletions(-)
+
+diff --git a/libnmstate/dns.py b/libnmstate/dns.py
+index f792b896..5bb512e8 100644
+--- a/libnmstate/dns.py
++++ b/libnmstate/dns.py
+@@ -19,14 +19,12 @@ EMPTY_DNS = {
+ REMOVE_DNS_CONFIG = {DNS.CONFIG: EMPTY_DNS}
+ 
+ 
+-SUPPORTED_DNS_OPTIONS = [
+-    "attempts",
++SUPPORTED_DNS_OPTS_NO_VALUE = [
+     "debug",
+     "edns0",
+     "inet6",
+     "ip6-bytestring",
+     "ip6-dotint",
+-    "ndots",
+     "no-aaaa",
+     "no-check-names",
+     "no-ip6-dotint",
+@@ -35,11 +33,16 @@ SUPPORTED_DNS_OPTIONS = [
+     "rotate",
+     "single-request",
+     "single-request-reopen",
+-    "timeout",
+     "trust-ad",
+     "use-vc",
+ ]
+ 
++SUPPORTED_DNS_OPTS_WITH_VALUE = [
++    "ndots",
++    "timeout",
++    "attempts",
++]
++
+ 
+ class DnsState:
+     PRIORITY_METADATA = "_priority"
+@@ -73,10 +76,24 @@ class DnsState:
+ 
+     def _canonicalize_dns_options(self):
+         for opt in self.config_options:
+-            if opt not in SUPPORTED_DNS_OPTIONS:
++            if opt.find(":") > 0:
++                opt = opt[: opt.find(":")]
++                if opt not in SUPPORTED_DNS_OPTS_WITH_VALUE:
++                    raise NmstateValueError(
++                        "Option '{}' is not supported to hold "
++                        "a value, only support these without "
++                        "value: {} and these with values: {}:n",
++                        opt,
++                        ", ".join(SUPPORTED_DNS_OPTS_NO_VALUE),
++                        ":n, ".join(SUPPORTED_DNS_OPTS_WITH_VALUE),
++                    )
++            elif opt not in SUPPORTED_DNS_OPTS_NO_VALUE:
+                 raise NmstateValueError(
+-                    f"Unsupported DNS option {opt}, only support: "
+-                    f"{', '.join(SUPPORTED_DNS_OPTIONS)}",
++                    "Option '{}' is not supported, only support these "
++                    "without value: {} and these with values: {}:n",
++                    opt,
++                    ", ".join(SUPPORTED_DNS_OPTS_NO_VALUE),
++                    ":n, ".join(SUPPORTED_DNS_OPTS_WITH_VALUE),
+                 )
+ 
+     @property
+-- 
+2.42.1
+
+
+From af07271ec5044ec092a3b66c0955636819ccde04 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 14 Nov 2023 16:16:53 +0800
+Subject: [PATCH 2/2] dns: Fix purging DNS config
+
+When user desires:
+
+```yml
+---
+dns-resolver:
+  config:
+    search: []
+```
+
+It means user want to remove all search but preserve servers and
+options, current nmstate incorrectly treat this as purge also.
+
+This patch only treat these two as purge.
+
+```yml
+dns-resolver:
+  config: {}
+```
+
+and
+
+```yml
+dns-resolver:
+  config:
+    server: []
+    search: []
+    options: []
+```
+
+Integration test cases included.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/nm/dns.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/libnmstate/nm/dns.py b/libnmstate/nm/dns.py
+index 60ebbba7..b811fdb2 100644
+--- a/libnmstate/nm/dns.py
++++ b/libnmstate/nm/dns.py
+@@ -158,7 +158,11 @@ def get_dns_config_iface_names(acs_and_ipv4_profiles, acs_and_ipv6_profiles):
+     for nm_ac, ip_profile in chain(
+         acs_and_ipv6_profiles, acs_and_ipv4_profiles
+     ):
+-        if ip_profile.props.dns or ip_profile.props.dns_search:
++        if (
++            ip_profile.props.dns
++            or ip_profile.props.dns_search
++            or ip_profile.props.dns_options
++        ):
+             try:
+                 iface_name = nm_ac.get_devices()[0].get_iface()
+                 iface_names.append(iface_name)
+-- 
+2.42.1
+
