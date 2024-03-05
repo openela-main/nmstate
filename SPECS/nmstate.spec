@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.15
-Release:        2%{?dist}
+Version:        2.2.23
+Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -83,14 +83,6 @@ pushd rust
 # Source3 is vendored dependencies
 %cargo_prep -V 3
 
-# The cargo_prep will create `.cargo/config` which take precedence over
-# `.cargo/config.toml` shipped by upstream which fix the SONAME of cdylib.
-# To workaround that, merge upstream rustflags into cargo_prep created one.
-_FLAGS=`sed -ne 's/rustflags = "\(.\+\)"/\1/p' .cargo/config.toml`
-sed -i -e "s/rustflags = \[\(.\+\), \]$/rustflags = [\1, \"$_FLAGS\"]/" \
-    .cargo/config
-rm .cargo/config.toml
-
 popd
 
 %build
@@ -98,7 +90,7 @@ pushd rust/src/python
 %py3_build
 popd
 pushd rust
-%cargo_build
+%cargo_build --ignore-rust-version
 popd
 
 %install
@@ -150,32 +142,56 @@ popd
 /sbin/ldconfig
 
 %changelog
-* Wed Sep 13 2023 Gris Ge <fge@redhat.com> - 2.2.15-2
-- Rebuild to retriger TPS jobs. RHEL-1527
+* Wed Jan 17 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.23-1
+- Upgrade to 2.2.23
+- Support type, hostaddrfamily and clientaddrfamily options in IPSec. RHEL-21354
+
+* Fri Jan 05 2024 Gris Ge <fge@redhat.com> - 2.2.22-1
+- Use hash value to mark applied yml files at nmstatectl service. RHEL-19778
+- Support SRIOV VLAN protocol. RHEL-16487
+
+* Tue Dec 19 2023 Gris Ge <fge@redhat.com> - 2.2.21-2
+- Fix `ipsec-interface` option. RHEL-19322
+
+* Fri Dec 15 2023 Íñigo Huguet <ihuguet@redhat.com> - 2.2.21-1
+- Upgrade to 2.2.21
+- Add Custom DPD Parameter - Authby and Interface. RHEL-19322
+
+* Wed Nov 15 2023 Gris Ge <fge@redhat.com> - 2.2.19-1
+- Fix static route converting auto IP interface to static IP. RHEL-16324
+
+* Wed Aug 30 2023 Gris Ge <fge@redhat.com> - 2.2.15-2
+- Rebuild for RHEL 9.3.
 
 * Wed Aug 23 2023 Gris Ge <fge@redhat.com> - 2.2.15-1
-- Fix DNS setting with OVS geneve interface. RHEL-1527
+- Upgrade to 2.2.15
 
-* Thu Jul 27 2023 Gris Ge <fge@redhat.com> - 2.2.14-1
-- Fix ECMP route in gen_conf mode. RHBZ#2224201
+* Wed Jul 26 2023 Gris Ge <fge@redhat.com> - 2.2.14-1
+- Upgrade to 2.2.14
 
 * Thu Jul 13 2023 Gris Ge <fge@redhat.com> - 2.2.13-1
-- Fix SR-IOV retry. RHBZ#2221050
+- Upgrade to 2.2.13
 
-* Wed Jun 07 2023 Gris Ge <fge@redhat.com> - 2.2.12-1
-- Upgrade to 2.2.12. RHBZ#2209894
+* Wed Jun 07 2023 Gris Ge <fge@redhat.com> - 2.2.12-2
+- Fix regression on SRIOV timeout. RHBZ#2212380
 
-* Mon May 22 2023 Gris Ge <fge@redhat.com> - 2.2.11-1
-- Upgrade to 2.2.11. RHBZ#2196434
+* Thu Jun 01 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.12-1
+- Upgrade to 2.2.12
 
-* Tue Apr 25 2023 Gris Ge <fge@redhat.com> - 2.2.10-2
-- Fix error when DHCP enabled with auto ip on STP bridge. RHBZ#2180508
+* Wed May 17 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.11-1
+- Upgrade to 2.2.11
 
-* Mon Apr 24 2023 Gris Ge <fge@redhat.com> - 2.2.10-1
-- Upgrade to 2.2.10. RHBZ#2180508
+* Tue Apr 25 2023 Gris Ge <fge@redhat.com> - 2.2.10-3
+- Fix error when DHCP enabled with auto ip on STP bridge
 
-* Thu Mar 30 2023 Gris Ge <fge@redhat.com> - 2.2.9-1
-- Upgrade to 2.2.9. RHBZ#2180508
+* Sun Apr 23 2023 Gris Ge <fge@redhat.com> - 2.2.10-2
+- Do not pin NIC if `net.ifnames=0`
+
+* Thu Mar 23 2023 Gris Ge <fge@redhat.com> - 2.2.9-1
+- Upgrade to 2.2.9
+
+* Sun Mar 12 2023 Gris Ge <fge@redhat.com> - 2.2.8-1
+- Upgrade to 2.2.8
 
 * Fri Feb 17 2023 Gris Ge <fge@redhat.com> - 2.2.7-1
 - Upgrade to 2.2.7
