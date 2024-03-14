@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.23
+Version:        2.2.24
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -142,6 +142,11 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Feb 08 2024 Gris Ge <fge@redhat.com> - 2.2.24-1
+- Upgrade to 2.2.24
+- Fix modification of ipsec connection. RHEL-23008
+- Fix nmstate.service on applied file. RHEL-24718
+
 * Wed Jan 17 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.23-1
 - Upgrade to 2.2.23
 - Support type, hostaddrfamily and clientaddrfamily options in IPSec. RHEL-21354
