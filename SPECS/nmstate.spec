@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.25
-Release:        1%{?dist}
+Version:        2.2.27
+Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -142,6 +142,12 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Fri Apr 05 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.27-2
+- Rebuild to use the right target
+
+* Fri Apr 05 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.27-1
+- Upgrade to 2.2.27-1
+
 * Thu Feb 22 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.25-1
 - Upgrade to 2.2.25
 
