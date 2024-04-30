@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.24
+Version:        2.2.25
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -90,7 +90,7 @@ pushd rust/src/python
 %py3_build
 popd
 pushd rust
-%cargo_build --ignore-rust-version
+%cargo_build
 popd
 
 %install
@@ -142,28 +142,38 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Feb 22 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.25-1
+- Upgrade to 2.2.25
+
 * Thu Feb 08 2024 Gris Ge <fge@redhat.com> - 2.2.24-1
 - Upgrade to 2.2.24
-- Fix modification of ipsec connection. RHEL-23008
-- Fix nmstate.service on applied file. RHEL-24718
 
-* Wed Jan 17 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.23-1
-- Upgrade to 2.2.23
-- Support type, hostaddrfamily and clientaddrfamily options in IPSec. RHEL-21354
+* Thu Jan 18 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.23-1
+- Upgrade to 2.2.23.
 
 * Fri Jan 05 2024 Gris Ge <fge@redhat.com> - 2.2.22-1
-- Use hash value to mark applied yml files at nmstatectl service. RHEL-19778
-- Support SRIOV VLAN protocol. RHEL-16487
+- Upgrade to 2.2.22.
 
 * Tue Dec 19 2023 Gris Ge <fge@redhat.com> - 2.2.21-2
-- Fix `ipsec-interface` option. RHEL-19322
+- Fix `ipsec-interface` option. RHEL-17403
 
 * Fri Dec 15 2023 Íñigo Huguet <ihuguet@redhat.com> - 2.2.21-1
-- Upgrade to 2.2.21
-- Add Custom DPD Parameter - Authby and Interface. RHEL-19322
+- Upgrade to 2.2.21.
+
+* Thu Nov 30 2023 Gris Ge <fge@redhat.com> - 2.2.20-1
+- Upgrade to 2.2.20.
 
 * Wed Nov 15 2023 Gris Ge <fge@redhat.com> - 2.2.19-1
-- Fix static route converting auto IP interface to static IP. RHEL-16324
+- Upgrade to 2.2.19.
+
+* Thu Nov 02 2023 Gris Ge <fge@redhat.com> - 2.2.18-1
+- Upgrade to 2.2.18.
+
+* Thu Sep 21 2023 Gris Ge <fge@redhat.com> - 2.2.16-1
+- Upgrade to 2.2.16.
+
+* Mon Sep 04 2023 Gris Ge <fge@redhat.com> - 2.2.15-3
+- Rebuild for RHEL 9.4.
 
 * Wed Aug 30 2023 Gris Ge <fge@redhat.com> - 2.2.15-2
 - Rebuild for RHEL 9.3.
