@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        1.4.5
+Version:        1.4.6
 Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -14,7 +14,7 @@ Source2:        https://www.nmstate.io/nmstate.gpg
 Source3:        %{url}/releases/download/v%{version}/%{srcname}-vendor-%{version}.tar.xz
 # Patches 0X are reserved to downstream only
 Patch0:         BZ_2132570-nm-reverse-IPv6-order-before-adding-them-to-setting.patch
-Patch10:        RHEL-13992-dns-opt-fix.patch
+Patch10:        0001-clib-Use-build.rs-to-fix-SONAME.patch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -84,22 +84,15 @@ gpgv2 --keyring ./gpgkey-mantainers.gpg %{SOURCE1} %{SOURCE0}
 pushd rust
 # Source3 is vendored dependencies
 %cargo_prep -V 3
-
-# The cargo_prep will create `.cargo/config` which take precedence over
-# `.cargo/config.toml` shipped by upstream which fix the SONAME of cdylib.
-# To workaround that, merge upstream rustflags into cargo_prep created one.
-_FLAGS=`sed -ne 's/rustflags = "\(.\+\)"/\1/p' .cargo/config.toml`
-sed -i -e "s/rustflags = \[\(.\+\), \]$/rustflags = [\1, \"$_FLAGS\"]/" \
-    .cargo/config
-rm .cargo/config.toml
-
 popd
 
 %build
 %py3_build
 
 pushd rust
-make
+# It is safe to ignore minimum rust version. The main blocker on MSRV is
+# toml which just increase their MSRV by a robot for no hard reason.
+%cargo_build --ignore-rust-version
 popd
 
 %install
@@ -149,14 +142,20 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Fri May 17 2024 Gris Ge <fge@redhat.com> - 1.4.6-2
+- Fix clib SONAME. RHEL-32218
+
+* Thu May 16 2024 Gris Ge <fge@redhat.com> - 1.4.6-1
+- Do not touch interface DNS if global DNS is used. RHEL-32218
+
 * Wed Nov 15 2023 Gris Ge <fge@redhat.com> - 1.4.5-2
-- Fix use case on purging DNS option. RHEL-13992
+- Fix use case on purging DNS option. RHEL-13936
 
-* Tue Nov 07 2023 Gris Ge <fge@redhat.com> - 1.4.5-1
-- Support DNS option. RHEL-13992
+* Thu Nov 02 2023 Gris Ge <fge@redhat.com> - 1.4.5-1
+- Support DNS option. RHEL-13936
 
-* Fri Oct 06 2023 Wen Liang <wenliang@redhat.com> - 1.4.4-5
-- Support treating string as int for address prefix-length. RHEL-11660
+* Wed Oct 04 2023 Wen Liang <wenliang@redhat.com> - 1.4.4-5
+- Support treating string as int for address prefix-length. RHEL-3358
 
 * Wed Aug 30 2023 Fernando Fernandez Mancera <ferferna@redhat.com> - 1.4.4-4
 - Fix issue with ovs-bridge and ovs-interface with same name. RHBZ#2231843

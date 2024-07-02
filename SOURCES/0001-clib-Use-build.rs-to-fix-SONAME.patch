@@ -1,0 +1,60 @@
+From 0b530d4c8e75f60015d13c225b1c634389fbe798 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Fri, 17 May 2024 13:12:14 +0800
+Subject: [PATCH] clib: Use build.rs to fix SONAME
+
+Use [`cargo:rustc-cdylib-link-arg`][1] to `build.rs` to fix the SONAME issue
+of cargo.
+
+Removed workarounds in rpm spec and `.cargo/config.toml`.
+
+Changed Makefile to place `-lnmstate` after the source file to fix
+compile issue on ubuntu 20.04 old gcc.
+
+[1]: https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-cdylib-link-arg
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ rust/.cargo/config.toml  | 3 ---
+ rust/src/clib/Cargo.toml | 1 +
+ rust/src/clib/build.rs   | 6 ++++++
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+ create mode 100644 rust/src/clib/build.rs
+
+diff --git a/rust/.cargo/config.toml b/rust/.cargo/config.toml
+index 018e59d4..ca6c72f7 100644
+--- a/rust/.cargo/config.toml
++++ b/rust/.cargo/config.toml
+@@ -1,5 +1,2 @@
+-[build]
+-rustflags = "-Clink-arg=-Wl,-soname=libnmstate.so.1"
+-
+ [target.x86_64-unknown-linux-gnu]
+ runner = 'sudo -E'
+diff --git a/rust/src/clib/Cargo.toml b/rust/src/clib/Cargo.toml
+index 462757ca..0eb00922 100644
+--- a/rust/src/clib/Cargo.toml
++++ b/rust/src/clib/Cargo.toml
+@@ -6,6 +6,7 @@ authors = ["Gris Ge <fge@redhat.com>"]
+ license = "Apache-2.0"
+ edition = "2018"
+ rust-version = "1.58"
++build = "build.rs"
+ 
+ [lib]
+ name = "nmstate"
+diff --git a/rust/src/clib/build.rs b/rust/src/clib/build.rs
+new file mode 100644
+index 00000000..74ad7e48
+--- /dev/null
++++ b/rust/src/clib/build.rs
+@@ -0,0 +1,6 @@
++// SPDX-License-Identifier: Apache-2.0
++
++fn main() {
++    #[cfg(target_os = "linux")]
++    println!("cargo:rustc-cdylib-link-arg=-Wl,-soname=libnmstate.so.1");
++}
+-- 
+2.45.1
+
