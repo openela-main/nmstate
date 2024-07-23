@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.27
-Release:        2%{?dist}
+Version:        2.2.33
+Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -142,6 +142,22 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Jun 13 2024 Gris Ge <fge@redhat.com> - 2.2.33-1
+- Upgrade to 2.2.33
+
+* Thu May 30 2024 Gris Ge <fge@redhat.com> - 2.2.32-1
+- Upgrade to 2.2.32
+- Set VLAN reorder-headers to true by default. RHEL-35691
+
+* Thu May 23 2024 Íñigo Huguet <ihuguet@redhat.com> - 2.2.31-1
+- Upgrade to 2.2.31
+
+* Fri Apr 26 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.29-2
+- Uploaded the right sources
+
+* Thu Apr 25 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.29-1
+- Upgrade to 2.2.29
+
 * Fri Apr 05 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.27-2
 - Rebuild to use the right target
 
