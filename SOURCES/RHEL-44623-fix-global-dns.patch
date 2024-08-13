@@ -1,0 +1,70 @@
+From 364842c0c09f9799a2c48a1bc3ce4debb1a3ddc2 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 18 Jun 2024 13:44:55 +0800
+Subject: [PATCH] dns: Do not touch iface DNS when apply identical DNS state
+
+When applying the same DNS only desire state again, nmstate incorrectly
+purged interface DNS.
+
+The root cause is we only set `self.use_global_dns` to True when
+DNS changed. The fix is set `self.use_global_dns` to True always unless
+iface DNS is required.
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/net_state.py | 12 +++++-------
+ 1 file changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/libnmstate/net_state.py b/libnmstate/net_state.py
+index 7b208daa..fe6fc31d 100644
+--- a/libnmstate/net_state.py
++++ b/libnmstate/net_state.py
+@@ -32,7 +32,7 @@ class NetState:
+         gen_conf_mode=False,
+         ignored_dns_ifaces=None,
+     ):
+-        self.use_global_dns = False
++        self.use_global_dns = True
+         if current_state is None:
+             current_state = {}
+         self._ifaces = Ifaces(
+@@ -76,17 +76,17 @@ class NetState:
+                         "interface profile, using global DNS"
+                     )
+                     logging.warning(
+-                        "Storing DNS to NetworkManager via global dns API, "
+-                        "this will cause __all__ interface level DNS settings "
+-                        "been ignored"
++                        "Storing DNS to NetworkManager via global DNS "
++                        "API, this will cause __all__ interface level "
++                        "DNS settings been ignored"
+                     )
+-                    self.use_global_dns = True
+             else:
+                 if self.dns.is_purge() or self._is_iface_dns_prefered():
+                     try:
+                         self._ifaces.gen_dns_metadata(
+                             self._dns, self._route, ignored_dns_ifaces
+                         )
++                        self.use_global_dns = False
+                     except NmstateValueError as e:
+                         if (
+                             gen_conf_mode
+@@ -99,14 +99,12 @@ class NetState:
+                                 "API, this will cause __all__ interface level "
+                                 "DNS settings been ignored"
+                             )
+-                            self.use_global_dns = True
+                 elif self.dns.config_changed:
+                     logging.warning(
+                         "Storing DNS to NetworkManager via global DNS "
+                         "API, this will cause __all__ interface level "
+                         "DNS settings been ignored"
+                     )
+-                    self.use_global_dns = True
+ 
+             self._ifaces.gen_route_metadata(self._route)
+             self._ifaces.gen_route_rule_metadata(self._route_rule, self._route)
+-- 
+2.45.2
+

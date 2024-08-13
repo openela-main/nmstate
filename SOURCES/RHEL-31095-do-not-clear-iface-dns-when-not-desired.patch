@@ -1,0 +1,184 @@
+From daf5e4e2282312a80ade85ac5728babf8b9af8b5 Mon Sep 17 00:00:00 2001
+From: Lubomir Rintel <lkundrak@v3.sk>
+Date: Mon, 17 Jun 2024 19:25:07 +0200
+Subject: [PATCH] nm: don't clear connection DNS if global DNS is not specified
+
+If the global DNS state is not specified, let's not overwrite it in
+Networkmanager profiles while doing unrelated changes.
+
+This is consistent with mainline (Rust) version of nmstate.
+
+Resolves: https://issues.redhat.com/browse/RHEL-31095
+Signed-off-by: Lubomir Rintel <lkundrak@v3.sk>
+Signed-off-by: Gris Ge <fge@redhat.com>
+---
+ libnmstate/dns.py           |  2 +-
+ libnmstate/nm/connection.py | 10 +++++++---
+ libnmstate/nm/ipv4.py       | 11 ++++++-----
+ libnmstate/nm/ipv6.py       | 11 ++++++-----
+ libnmstate/nm/profile.py    |  8 +++++---
+ libnmstate/nm/profiles.py   |  7 ++++++-
+ 6 files changed, 31 insertions(+), 18 deletions(-)
+
+diff --git a/libnmstate/dns.py b/libnmstate/dns.py
+index 5bb512e8..f50b9bfd 100644
+--- a/libnmstate/dns.py
++++ b/libnmstate/dns.py
+@@ -51,7 +51,7 @@ class DnsState:
+         self._config_changed = False
+         self._cur_dns_state = deepcopy(cur_dns_state) if cur_dns_state else {}
+         self._dns_state = merge_dns(des_dns_state, cur_dns_state or {})
+-        if self._dns_state == REMOVE_DNS_CONFIG:
++        if des_dns_state is not None and self._dns_state == REMOVE_DNS_CONFIG:
+             self._config_changed = True
+         elif des_dns_state and des_dns_state.get(DNS.CONFIG):
+             if cur_dns_state:
+diff --git a/libnmstate/nm/connection.py b/libnmstate/nm/connection.py
+index 6448e372..a6aac82c 100644
+--- a/libnmstate/nm/connection.py
++++ b/libnmstate/nm/connection.py
+@@ -104,11 +104,15 @@ class _ConnectionSetting:
+         return self._setting
+ 
+ 
+-def create_new_nm_simple_conn(iface, nm_profile):
++def create_new_nm_simple_conn(iface, nm_profile, clear_dns=False):
+     nm_iface_type = Api2Nm.get_iface_type(iface.type)
+     iface_info = iface.to_dict()
+-    ipv4_set = create_ipv4_setting(iface_info.get(Interface.IPV4), nm_profile)
+-    ipv6_set = create_ipv6_setting(iface_info.get(Interface.IPV6), nm_profile)
++    ipv4_set = create_ipv4_setting(
++        iface_info.get(Interface.IPV4), nm_profile, clear_dns
++    )
++    ipv6_set = create_ipv6_setting(
++        iface_info.get(Interface.IPV6), nm_profile, clear_dns
++    )
+     set_wait_ip(ipv4_set, ipv6_set, iface_info.get(Interface.WAIT_IP))
+     settings = [ipv4_set, ipv6_set]
+     con_setting = _ConnectionSetting()
+diff --git a/libnmstate/nm/ipv4.py b/libnmstate/nm/ipv4.py
+index 32b3428e..3f4de059 100644
+--- a/libnmstate/nm/ipv4.py
++++ b/libnmstate/nm/ipv4.py
+@@ -13,7 +13,7 @@ from .common import NM
+ INT32_MAX = 2**31 - 1
+ 
+ 
+-def create_setting(config, base_con_profile):
++def create_setting(config, base_con_profile, clear_dns=True):
+     setting_ipv4 = None
+     if base_con_profile and config and config.get(InterfaceIPv4.ENABLED):
+         setting_ipv4 = base_con_profile.get_setting_ip4_config()
+@@ -28,10 +28,11 @@ def create_setting(config, base_con_profile):
+             setting_ipv4.props.route_metric = Route.USE_DEFAULT_METRIC
+             setting_ipv4.clear_routes()
+             setting_ipv4.clear_routing_rules()
+-            setting_ipv4.clear_dns()
+-            setting_ipv4.clear_dns_searches()
+-            setting_ipv4.clear_dns_options(False)
+-            setting_ipv4.props.dns_priority = nm_dns.DEFAULT_DNS_PRIORITY
++            if clear_dns:
++                setting_ipv4.clear_dns()
++                setting_ipv4.clear_dns_searches()
++                setting_ipv4.clear_dns_options(False)
++                setting_ipv4.props.dns_priority = nm_dns.DEFAULT_DNS_PRIORITY
+ 
+     if not setting_ipv4:
+         setting_ipv4 = NM.SettingIP4Config.new()
+diff --git a/libnmstate/nm/ipv6.py b/libnmstate/nm/ipv6.py
+index f84d895c..fb3cdcf0 100644
+--- a/libnmstate/nm/ipv6.py
++++ b/libnmstate/nm/ipv6.py
+@@ -67,7 +67,7 @@ def get_info(active_connection, applied_config):
+     return info
+ 
+ 
+-def create_setting(config, base_con_profile):
++def create_setting(config, base_con_profile, clear_dns=True):
+     setting_ip = None
+     if base_con_profile and config and config.get(InterfaceIPv6.ENABLED):
+         setting_ip = base_con_profile.get_setting_ip6_config()
+@@ -82,10 +82,11 @@ def create_setting(config, base_con_profile):
+             setting_ip.props.gateway = None
+             setting_ip.props.route_table = Route.USE_DEFAULT_ROUTE_TABLE
+             setting_ip.props.route_metric = Route.USE_DEFAULT_METRIC
+-            setting_ip.clear_dns()
+-            setting_ip.clear_dns_searches()
+-            setting_ip.clear_dns_options(False)
+-            setting_ip.props.dns_priority = nm_dns.DEFAULT_DNS_PRIORITY
++            if clear_dns:
++                setting_ip.clear_dns()
++                setting_ip.clear_dns_searches()
++                setting_ip.clear_dns_options(False)
++                setting_ip.props.dns_priority = nm_dns.DEFAULT_DNS_PRIORITY
+ 
+     if not setting_ip:
+         setting_ip = NM.SettingIP6Config.new()
+diff --git a/libnmstate/nm/profile.py b/libnmstate/nm/profile.py
+index a0b1c8f8..acb849b6 100644
+--- a/libnmstate/nm/profile.py
++++ b/libnmstate/nm/profile.py
+@@ -273,7 +273,9 @@ class NmProfile:
+             self._iface.type == InterfaceType.ETHERNET and self._iface.is_peer
+         )
+ 
+-    def prepare_config(self, save_to_disk, gen_conf_mode=False):
++    def prepare_config(
++        self, save_to_disk, gen_conf_mode=False, clear_dns=True
++    ):
+         if self._iface.is_absent or (
+             self._iface.is_down
+             and not gen_conf_mode
+@@ -307,7 +309,7 @@ class NmProfile:
+         #       of nmstate should provide full/merged configure.
+         if self._iface.is_changed or self._iface.is_desired:
+             self._nm_simple_conn = create_new_nm_simple_conn(
+-                self._iface, self._nm_profile
++                self._iface, self._nm_profile, clear_dns
+             )
+         elif self._nm_profile:
+             self._nm_simple_conn = NM.SimpleConnection.new_clone(
+@@ -316,7 +318,7 @@ class NmProfile:
+         else:
+             try:
+                 self._nm_simple_conn = create_new_nm_simple_conn(
+-                    self._iface, self._nm_profile
++                    self._iface, self._nm_profile, clear_dns
+                 )
+             # No error for undesired interface
+             except NmstateError:
+diff --git a/libnmstate/nm/profiles.py b/libnmstate/nm/profiles.py
+index e68efdf3..9ce21938 100644
+--- a/libnmstate/nm/profiles.py
++++ b/libnmstate/nm/profiles.py
+@@ -52,6 +52,7 @@ class NmProfiles:
+ 
+     def apply_config(self, net_state, save_to_disk):
+         if net_state.dns.config_changed:
++            clear_profile_dns = True
+             if net_state.use_global_dns:
+                 apply_global_dns(
+                     net_state.dns.config_servers,
+@@ -60,6 +61,8 @@ class NmProfiles:
+                 )
+             else:
+                 apply_global_dns([], [], [])
++        else:
++            clear_profile_dns = False
+ 
+         self._prepare_state_for_profiles(net_state)
+         # The activation order on bridge/bond ports determins their controler's
+@@ -74,7 +77,9 @@ class NmProfiles:
+ 
+         for profile in all_profiles:
+             profile.import_current()
+-            profile.prepare_config(save_to_disk, gen_conf_mode=False)
++            profile.prepare_config(
++                save_to_disk, gen_conf_mode=False, clear_dns=clear_profile_dns
++            )
+         _use_uuid_as_controller_and_parent(all_profiles)
+ 
+         changed_ovs_bridges_and_ifaces = {}
+-- 
+2.45.2
+

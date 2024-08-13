@@ -4,7 +4,7 @@
 
 Name:           nmstate
 Version:        1.4.6
-Release:        2%{?dist}
+Release:        4%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -15,6 +15,8 @@ Source3:        %{url}/releases/download/v%{version}/%{srcname}-vendor-%{version
 # Patches 0X are reserved to downstream only
 Patch0:         BZ_2132570-nm-reverse-IPv6-order-before-adding-them-to-setting.patch
 Patch10:        0001-clib-Use-build.rs-to-fix-SONAME.patch
+Patch11:        RHEL-44623-fix-global-dns.patch
+Patch12:        RHEL-31095-do-not-clear-iface-dns-when-not-desired.patch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -142,6 +144,12 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Sun Jul 14 2024 Gris Ge <fge@redhat.com> - 1.4.6-4
+- Do not clear iface DNS if not desired. RHEL-31095
+
+* Wed Jun 26 2024 Gris Ge <fge@redhat.com> - 1.4.6-3
+- Fix global DNS on second apply. RHEL-44623
+
 * Fri May 17 2024 Gris Ge <fge@redhat.com> - 1.4.6-2
 - Fix clib SONAME. RHEL-32218
 
