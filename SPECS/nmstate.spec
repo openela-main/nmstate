@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.33
+Version:        2.2.35
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -142,27 +142,51 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Aug 22 2024 Gris Ge <fge@redhat.com> - 2.2.35-1
+- Upgrade to 2.2.35
+- Fix gen_diff on VLAN ID change. RHEL-38623
+- Fix Nmpolicy on mac-address identifier. RHEL-54292
+- Fix reapply. RHEL-50556
+
 * Thu Jun 13 2024 Gris Ge <fge@redhat.com> - 2.2.33-1
 - Upgrade to 2.2.33
+- Fix validation of controller overbook. RHEL-40683
+- Support DNS and route in kernel mode. RHEL-37665
 
 * Thu May 30 2024 Gris Ge <fge@redhat.com> - 2.2.32-1
 - Upgrade to 2.2.32
-- Set VLAN reorder-headers to true by default. RHEL-35691
+- Set VLAN reorder-headers to true by default. RHEL-33362
 
-* Thu May 23 2024 Íñigo Huguet <ihuguet@redhat.com> - 2.2.31-1
+* Mon May 20 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.31-1
 - Upgrade to 2.2.31
+- Support IPSec leftsubnet property. RHEL-26755
 
-* Fri Apr 26 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.29-2
-- Uploaded the right sources
+* Fri May 03 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.30-1
+- Upgrade to 2.2.30
 
 * Thu Apr 25 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.29-1
 - Upgrade to 2.2.29
 
-* Fri Apr 05 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.27-2
-- Rebuild to use the right target
+* Mon Apr 22 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.28-1
+- Upgrade to 2.2.28
 
-* Fri Apr 05 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.27-1
-- Upgrade to 2.2.27-1
+* Thu Mar 21 2024 Gris Ge <fge@redhat.com> - 2.2.27-1
+### Breaking changes
+ - N/A
+
+### New features
+ - Support TCP congestion window(cwnd) in route. (59f99632)
+ - Support query interface driver. (67817c23)
+ - New API to generate changed state. (fe5327a2)
+
+### Bug fixes
+ - Include driver information for `persist-nic-names` subcommand. (1129e46b)
+ - nm: Protect global DNS config in checkpoint. (881373ba)
+ - route rule: Append rule instead of overriding when iface defined. (88d3d3ef)
+- Resolves RHEL-19409
+
+* Wed Mar 13 2024 Gris Ge <fge@redhat.com> - 2.2.26-1
+- Upgrade to 2.2.26
 
 * Thu Feb 22 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.25-1
 - Upgrade to 2.2.25
