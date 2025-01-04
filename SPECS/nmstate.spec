@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.35
+Version:        2.2.39
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -142,6 +142,19 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Wed Nov 20 2024 Wen Liang <wenliang@redhat.com> - 2.2.39-1
+- Upgrade to 2.2.39
+- Fix VLAN interface being removed unnecessarily due to route mismatches triggering deactivations. RHEL-65031
+
+* Thu Oct 24 2024 Gris Ge <fge@redhat.com> - 2.2.38-1
+- Upgrade to 2.2.38
+- Fix gc mode on blackhole route. RHEL-58666
+- Only search desired interface for storing route rule. RHEL-60261
+
+* Mon Oct  7 2024 Wen Liang <wenliang@redhat.com> - 2.2.37-1
+- Upgrade to 2.2.37
+- Fix disabling IPv6 on ovs-interface. RHEL-60242
+
 * Thu Aug 22 2024 Gris Ge <fge@redhat.com> - 2.2.35-1
 - Upgrade to 2.2.35
 - Fix gen_diff on VLAN ID change. RHEL-38623
