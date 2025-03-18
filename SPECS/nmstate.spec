@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.39
+Version:        2.2.40
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -142,6 +142,11 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Mon Jan 27 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.40-1
+- Upgrade to 2.2.40
+- Provide an option to disable only nmstate log in python API (RHEL-76316)
+- Remove down up workaround for route removal in Nmstate (RHEL-75151)
+
 * Wed Nov 20 2024 Wen Liang <wenliang@redhat.com> - 2.2.39-1
 - Upgrade to 2.2.39
 - Fix VLAN interface being removed unnecessarily due to route mismatches triggering deactivations. RHEL-65031
