@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.40
+Version:        2.2.43
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -142,6 +142,15 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Tue Apr 01 2025 Wen Liang <wenliang@redhat.com> - 2.2.43-1
+- Upgrade to 2.2.43
+- Support ethtool Forward Error Correction (FEC). RHEL-80785
+
+* Wed Mar 19 2025 Gris Ge <fge@redhat.com> - 2.2.41-1
+- Upgrade to 2.2.41.
+- Support nm connection with empty connection.interface-name (RHEL-82661)
+- Fix ovsdb purging issue (RHEL-79176)
+
 * Mon Jan 27 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.40-1
 - Upgrade to 2.2.40
 - Provide an option to disable only nmstate log in python API (RHEL-76316)
