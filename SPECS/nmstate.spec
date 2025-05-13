@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.43
+Version:        2.2.44
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -18,6 +18,7 @@ BuildRequires:  gnupg2
 BuildRequires:  rust-toolset
 BuildRequires:  pkg-config
 BuildRequires:  systemd
+Requires:       (nmstate-libs%{?_isa} = %{version}-%{release} if nmstate-libs)
 
 %description
 Nmstate is a library with an accompanying command line tool that manages host
@@ -142,32 +143,48 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Fri Apr 18 2025 Gris Ge <fge@redhat.com> - 2.2.44-1
+- Upgrade to 2.2.44
+- Fix reapply on interface refered by MAC. RHEL-87793
+
 * Tue Apr 01 2025 Wen Liang <wenliang@redhat.com> - 2.2.43-1
 - Upgrade to 2.2.43
-- Support ethtool Forward Error Correction (FEC). RHEL-80785
+- Support ethtool Forward Error Correction (FEC). RHEL-80786
+- Support nm connection with empty connection.interface-name. RHEL-82662
 
-* Wed Mar 19 2025 Gris Ge <fge@redhat.com> - 2.2.41-1
-- Upgrade to 2.2.41.
-- Support nm connection with empty connection.interface-name (RHEL-82661)
-- Fix ovsdb purging issue (RHEL-79176)
+* Sun Feb 23 2025 Gris Ge <fge@redhat.com> - 2.2.41-1
+- Upgrade to 2.2.41
+- Fix the lose of OVS DB system-id. RHEL-78652
+- Support overriding interface config. RHEL-59935
 
-* Mon Jan 27 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.40-1
+* Fri Jan 24 2025 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.40-1
 - Upgrade to 2.2.40
-- Provide an option to disable only nmstate log in python API (RHEL-76316)
-- Remove down up workaround for route removal in Nmstate (RHEL-75151)
+- Do not deactivate connection when removing routes. RHEL-70138
+- Use specific libnmstate logger. RHEL-72016
+- Do not deactivate connection if mptcp flags didn't change. RHEL-53211
 
-* Wed Nov 20 2024 Wen Liang <wenliang@redhat.com> - 2.2.39-1
+* Mon Jan 20 2025 Gris Ge <fge@redhat.com> - 2.2.39-1
 - Upgrade to 2.2.39
-- Fix VLAN interface being removed unnecessarily due to route mismatches triggering deactivations. RHEL-65031
+- Avoid unnecessary deactivation. RHEL-64707
 
 * Thu Oct 24 2024 Gris Ge <fge@redhat.com> - 2.2.38-1
 - Upgrade to 2.2.38
-- Fix gc mode on blackhole route. RHEL-58666
-- Only search desired interface for storing route rule. RHEL-60261
+- Preserve current IP setting for multiconnect profile. RHEL-61890
+- Fix profile name changing. RHEL-59239
+- IPvlan support. RHEL-43438
+- Handle ipv6.method: ignore. RHEL-58406
 
-* Mon Oct  7 2024 Wen Liang <wenliang@redhat.com> - 2.2.37-1
+* Mon Oct 07 2024 Fernando Fernandez Mancera <ferferna@redhat.com> - 2.2.37-1
 - Upgrade to 2.2.37
-- Fix disabling IPv6 on ovs-interface. RHEL-60242
+- Only search desired interface for storing route rule. RHEL-59965
+
+* Tue Sep 24 2024 Gris Ge <fge@redhat.com> - 2.2.36-1
+- Upgrade to 2.2.36
+- Support route source. RHEL-56258
+- Fix setting empty MPTCP flags. RHEL-38607
+- Fix gc mode on blackhole route. RHEL-56727
+- Support ipsec require-id-on-certificate. RHEL-50696
+- Reselect iface DNS if desired. RHEL-56557
 
 * Thu Aug 22 2024 Gris Ge <fge@redhat.com> - 2.2.35-1
 - Upgrade to 2.2.35
