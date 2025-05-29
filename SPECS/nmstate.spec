@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.44
+Version:        2.2.45
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -143,6 +143,10 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Wed May 28 2025 Gris Ge <fge@redhat.com> - 2.2.45-1
+- Upgrade to 2.2.25
+- Fix OVS stuck on `nmstatectl show`. RHEL-93175
+
 * Fri Apr 18 2025 Gris Ge <fge@redhat.com> - 2.2.44-1
 - Upgrade to 2.2.44
 - Fix reapply on interface refered by MAC. RHEL-87793
