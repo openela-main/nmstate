@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.45
-Release:        1%{?dist}
+Version:        2.2.48
+Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -19,6 +19,9 @@ BuildRequires:  rust-toolset
 BuildRequires:  pkg-config
 BuildRequires:  systemd
 Requires:       (nmstate-libs%{?_isa} = %{version}-%{release} if nmstate-libs)
+
+# Patches to remove in next rebase
+Patch1001: 1001-dont-add-dns-to-down-iface.patch
 
 %description
 Nmstate is a library with an accompanying command line tool that manages host
@@ -143,8 +146,22 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Jul 24 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.48-2
+- Fix DNS settings with search or option only being saved to down NM connection. RHEL-104796 
+
+* Sat Jul 12 2025 Gris Ge <fge@redhat.com> - 2.2.48-1
+- Upgrade to 2.2.48
+- Fix SRIOV VF reference. RHEL-93179
+- Apply dispatch changes first. RHEL-101741
+
+* Fri Jun 20 2025 Gris Ge <fge@redhat.com> - 2.2.46-1
+- Upgrade to 2.2.46
+- Store DNS to both iface and global DNS. RHEL-96176
+- Support nmpolicy against down iface. RHEL-88992
+- Support removal VLAN connection with empty ifname. RHEL-93145
+
 * Wed May 28 2025 Gris Ge <fge@redhat.com> - 2.2.45-1
-- Upgrade to 2.2.25
+- Upgrade to 2.2.45
 - Fix OVS stuck on `nmstatectl show`. RHEL-93175
 
 * Fri Apr 18 2025 Gris Ge <fge@redhat.com> - 2.2.44-1
