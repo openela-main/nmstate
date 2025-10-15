@@ -3,8 +3,8 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.48
-Release:        2%{?dist}
+Version:        2.2.52
+Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -19,9 +19,6 @@ BuildRequires:  rust-toolset
 BuildRequires:  pkg-config
 BuildRequires:  systemd
 Requires:       (nmstate-libs%{?_isa} = %{version}-%{release} if nmstate-libs)
-
-# Patches to remove in next rebase
-Patch1001: 1001-dont-add-dns-to-down-iface.patch
 
 %description
 Nmstate is a library with an accompanying command line tool that manages host
@@ -146,6 +143,16 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Mon Sep 22 2025 Gris Ge <fge@redhat.com> - 2.2.52-1
+- Upgrade to 2.2.52
+- Support interface alternative names. RHEL-110777
+- Support IPv4 forwarding. RHEL-110786
+- Support IPSec `leftsendcert` option. RHEL-110633
+
+* Fri Sep 05 2025 Gris Ge <fge@redhat.com> - 2.2.50-1
+- Upgrade to 2.2.50
+- Support MAC referring for VLAN in `nmstatectl gc`. RHEL-110368
+
 * Thu Jul 24 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.48-2
 - Fix DNS settings with search or option only being saved to down NM connection. RHEL-104796 
 
