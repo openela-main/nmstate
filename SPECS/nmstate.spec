@@ -145,45 +145,51 @@ popd
 %changelog
 * Mon Oct 20 2025 Gris Ge <fge@redhat.com> - 2.2.54-1
 - Upgrade to 2.2.54.
-- Support matching interface via PCI address. RHEL-121109
-- Fix OVSDB query failure on database bigger than 20KiB. RHEL-121990
+- Support matching interface via PCI address. RHEL-121110
+- Fix OVSDB query failure on database bigger than 20KiB. RHEL-121991
 
 * Mon Sep 22 2025 Gris Ge <fge@redhat.com> - 2.2.52-1
 - Upgrade to 2.2.52
-- Support interface alternative names. RHEL-110777
-- Support IPv4 forwarding. RHEL-110786
-- Support IPSec `leftsendcert` option. RHEL-110633
+- Support IPSec `leftsendcert` option. RHEL-110634
+- Support interface alternative names. RHEL-110778
 
-* Fri Sep 05 2025 Gris Ge <fge@redhat.com> - 2.2.50-1
-- Upgrade to 2.2.50
-- Support MAC referring for VLAN in `nmstatectl gc`. RHEL-110368
-
-* Thu Jul 24 2025 Íñigo Huguet <ihuguet@redhat.com> - 2.2.48-2
-- Fix DNS settings with search or option only being saved to down NM connection. RHEL-104796 
+* Tue Aug 5 2025 Rahul Rajesh <rrajesh@redhat.com> - 2.2.49-1
+- Upgrade to 2.2.49
+- Ignore desired MAC for bonds with fail_over_mac. RHEL-107526
+- Fix setting DNS only with search or option. RHEL-104797
 
 * Sat Jul 12 2025 Gris Ge <fge@redhat.com> - 2.2.48-1
 - Upgrade to 2.2.48
-- Fix SRIOV VF reference. RHEL-93179
-- Apply dispatch changes first. RHEL-101741
+- Validate OVN bridge mapping. RHEL-85787
+- Support bond `lacp_active` and `ns_ip6_target`. RHEL-85784
+- Support matching by PCI adress. RHEL-88993
+- Apply dispatch changes first. RHEL-101742
+- Fix SRIOV VF reference. RHEL-93180
 
 * Fri Jun 20 2025 Gris Ge <fge@redhat.com> - 2.2.46-1
 - Upgrade to 2.2.46
-- Store DNS to both iface and global DNS. RHEL-96176
-- Support nmpolicy against down iface. RHEL-88992
-- Support removal VLAN connection with empty ifname. RHEL-93145
+- Store DNS to both iface and global DNS. RHEL-91291
+- Support nmpolicy against down iface. RHEL-88989
+- Support removal VLAN connection with empty ifname. RHEL-93146
 
 * Wed May 28 2025 Gris Ge <fge@redhat.com> - 2.2.45-1
-- Upgrade to 2.2.45
-- Fix OVS stuck on `nmstatectl show`. RHEL-93175
+- Upgrade to 2.2.25
+- Fix stuck of nmstatectl show on OVS. RHEL-93176
 
 * Fri Apr 18 2025 Gris Ge <fge@redhat.com> - 2.2.44-1
 - Upgrade to 2.2.44
-- Fix reapply on interface refered by MAC. RHEL-87793
+- Refer route next hop interface by MAC. RHEL-32495
+- Support reapply on mac-ref interface. RHEL-87794
 
-* Tue Apr 01 2025 Wen Liang <wenliang@redhat.com> - 2.2.43-1
+* Wed Mar 26 2025 Mingyu Shi <mshi@redhat.com> - 2.2.43-1
 - Upgrade to 2.2.43
-- Support ethtool Forward Error Correction (FEC). RHEL-80786
-- Support nm connection with empty connection.interface-name. RHEL-82662
+- Support for vlan-egress-priority-map configuration. RHEL-67631
+- Support FEC. RHEL-80725
+- Support quickack. RHEL-80418
+
+* Wed Mar 05 2025 Gris Ge <fge@redhat.com> - 2.2.42-1
+- Upgrade to 2.2.42
+- Support congression windows on route. RHEL-59589
 
 * Sun Feb 23 2025 Gris Ge <fge@redhat.com> - 2.2.41-1
 - Upgrade to 2.2.41
