@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.54
+Version:        2.2.57
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -143,6 +143,11 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Wed Dec 10 2025 Gris Ge <fge@redhat.com> - 2.2.57-1
+- Upgrade to 2.2.57
+- Use global DNS even for static IP with static DNS. (RHEL-126730)
+- Add libreswan leftprotoport and rightprotoport support. (RHEL-130911
+
 * Mon Oct 20 2025 Gris Ge <fge@redhat.com> - 2.2.54-1
 - Upgrade to 2.2.54.
 - Support matching interface via PCI address. RHEL-121110
