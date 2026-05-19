@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.57
+Version:        2.2.58
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -143,20 +143,40 @@ popd
 /sbin/ldconfig
 
 %changelog
-* Wed Dec 10 2025 Gris Ge <fge@redhat.com> - 2.2.57-1
+* Wed Feb 11 2026 Mingyu Shi <mshi@redhat.com> - 2.2.58-1
+- Upgrade to 2.2.58
+- vrf: Handle ignore interface when verifying desired state. RHEL-141606
+- alt-name: Remove alt-names when interface marked as absent. RHEL-141602
+- hsr: Automatically disable IP on hsr port. RHEL-141609
+- hsr: add support for configuring "interlink" property. RHEL-141608
+- Support referring interface name using its alternative name. RHEL-141601
+
+* Tue Dec 09 2025 Gris Ge <fge@redhat.com> - 2.2.57-1
 - Upgrade to 2.2.57
-- Use global DNS even for static IP with static DNS. (RHEL-126730)
-- Add libreswan leftprotoport and rightprotoport support. (RHEL-130911
+- Add libreswan leftprotoport and rightprotoport support. (RHEL-130912)
+
+* Tue Nov 25 2025 Gris Ge <fge@redhat.com> - 2.2.56-1
+- Upgrade to 2.2.56
+- Allow using VRF name to specify route table. RHEL-123541
+- Support OVS-DPDK dpdk-lsc-interrupt in nmstate. RHEL-125052
+- Applying desired state with static DNS with static IP will touch `br-ex` even not mentioned. RHEL-126731
+- Support rightca ipsec option. RHEL-123542
 
 * Mon Oct 20 2025 Gris Ge <fge@redhat.com> - 2.2.54-1
 - Upgrade to 2.2.54.
-- Support matching interface via PCI address. RHEL-121110
-- Fix OVSDB query failure on database bigger than 20KiB. RHEL-121991
+- Automatically set HSR port MAC address. RHEL-122171
+- Fix OVSDB query failure on database bigger than 20KiB. RHEL-121992
 
-* Mon Sep 22 2025 Gris Ge <fge@redhat.com> - 2.2.52-1
+* Tue Sep 16 2025 Gris Ge <fge@redhat.com> - 2.2.52-1
 - Upgrade to 2.2.52
-- Support IPSec `leftsendcert` option. RHEL-110634
-- Support interface alternative names. RHEL-110778
+- Support interface altnative name. RHEL-110781
+
+* Mon Sep 01 2025 Mingyu Shi <mshi@redhat.com> - 2.2.50-1
+- Upgrade to 2.2.50
+- Support MAC referring for VLAN in gen_conf. RHEL-110369
+- Introduce state: ignore for route. RHEL-107130
+- Support PCI address matching in gen_conf. RHEL-110369
+- Support MacSec interface in gen_conf. RHEL-110369
 
 * Tue Aug 5 2025 Rahul Rajesh <rrajesh@redhat.com> - 2.2.49-1
 - Upgrade to 2.2.49
