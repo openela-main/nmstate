@@ -3,7 +3,7 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.58
+Version:        2.2.60
 Release:        1%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
@@ -12,6 +12,7 @@ Source0:        https://github.com/nmstate/nmstate/releases/download/v%{version}
 Source1:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz.asc
 Source2:        https://nmstate.io/nmstate.gpg
 Source3:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-vendor-%{version}.tar.xz
+Patch1:         0001-nispor-fix-ipoib-iface-type.patch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -78,12 +79,23 @@ This package contains the Python 3 library for Nmstate.
 %prep
 gpg2 --import --import-options import-export,import-minimal %{SOURCE2} > ./gpgkey-mantainers.gpg
 gpgv2 --keyring ./gpgkey-mantainers.gpg %{SOURCE1} %{SOURCE0}
-%autosetup -p1
+
+%autosetup -n %{name}-%{version_no_tilde} -p1 %{?rhel:-a3}
+
+# If we have a patch for a vendored dependency, cargo refuses to build,
+# in order to prevent accidental manual changes to vendored crates.
+# This is not needed in an rpm build. Clear the list of files for which
+# to check the checksum.
+find vendor -name .cargo-checksum.json \
+  -exec sed -i.uncheck -e 's/"files":{[^}]*}/"files":{ }/' '{}' '+'
 
 pushd rust
-# Source3 is vendored dependencies
-%cargo_prep -V 3
-
+%if 0%{?rhel}
+mv ../vendor ./
+%cargo_prep -v vendor
+%else
+%cargo_prep
+%endif
 popd
 
 %build
@@ -92,6 +104,11 @@ pushd rust/src/python
 popd
 pushd rust
 %cargo_build
+%cargo_license_summary
+%{cargo_license} > ../LICENSE.dependencies
+%if 0%{?rhel}
+%cargo_vendor_manifest
+%endif
 popd
 
 %install
@@ -108,6 +125,10 @@ popd
 
 %files
 %doc README.md
+%license LICENSE.dependencies
+%if 0%{?rhel}
+%license rust/cargo-vendor.txt
+%endif
 %doc examples/
 %{_mandir}/man8/nmstate.service.8*
 %{_mandir}/man8/nmstatectl.8*
@@ -143,6 +164,14 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu May 06 2026 Ján Václav <jvaclav@redhat.com> - 2.2.60-1
+- Upgrade to 2.2.60
+- ipv4: Add new parameter prefix-route-metric RHEL-170695
+
+* Thu Mar 05 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.59-1
+- Upgrade to 2.2.59
+- Add support for lock-mtu option. RHEL-151933.
+
 * Wed Feb 11 2026 Mingyu Shi <mshi@redhat.com> - 2.2.58-1
 - Upgrade to 2.2.58
 - vrf: Handle ignore interface when verifying desired state. RHEL-141606
