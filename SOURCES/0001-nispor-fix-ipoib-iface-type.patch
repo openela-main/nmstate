@@ -1,0 +1,63 @@
+From 18fce5de48c2687131eab604c31c4738ffc2554c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=C3=8D=C3=B1igo=20Huguet?= <ihuguet@riseup.net>
+Date: Mon, 4 May 2026 07:24:15 +0200
+Subject: [PATCH] infiniband: restore detection of Ipoib iface type
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes 5e13d3f "Prefer LinkInfo::Kind as interface type". This commit
+made to always prefer InfoKind over anything for Ethernet, but at the
+same time it made to prefer LinkLayerType over InfoKind for Infiniband.
+This causes that the Ipoib iface typeis not detected anymore, causing
+two problems:
+- Interfaces previously detected as Ipoib are now detected as
+  Infiniband, breaking some clients like nmstate.
+- The Ipoib data is not parsed, as it is only done for Ipoib iface type.
+
+Fix it by prefering the "Infiniband" generic type only if no InfoKind
+was detected, or InfoKind::Other was detected.
+
+Signed-off-by: Íñigo Huguet <ihuguet@riseup.net>
+---
+ src/lib/query/iface.rs | 23 ++++++++++++++++-------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/src/lib/query/iface.rs b/src/lib/query/iface.rs
+index 9e21070..cce4f40 100644
+--- a/vendor/nispor/query/iface.rs
++++ b/vendor/nispor/query/iface.rs
+@@ -420,14 +420,23 @@ pub(crate) fn parse_nl_msg_to_iface(
+                         },
+                         _ => IfaceType::Other(format!("{t:?}").to_lowercase()),
+                     };
+-                    // Always prefer InfoKind unless link type is loopback or
+-                    // infiniband.
+-                    if !matches!(
+-                        iface_state.iface_type,
+-                        IfaceType::Loopback | IfaceType::Infiniband
+-                    ) {
+-                        iface_state.iface_type = iface_type;
++
++                    // We prefer LinkLayerType over InfoKind for loopback, as it
++                    // is more accurate in this case. We also prefer it for
++                    // infiniband, but only if we didn't detect a specific
++                    // InfoKind (we detected Other). For example, Ipoib is more
++                    // specific than Infiniband, but Other is not.
++                    if iface_state.iface_type == IfaceType::Loopback
++                        || (iface_state.iface_type == IfaceType::Infiniband
++                            && matches!(iface_type, IfaceType::Other(_)))
++                    {
++                        continue;
+                     }
++
++                    // For any other case, we prefer InfoKind over LinkLayerType
++                    // as it is almost always more accurate. LinkLayerType is
++                    // set as ethernet for most device types.
++                    iface_state.iface_type = iface_type;
+                 }
+             }
+             for info in infos {
+-- 
+2.53.0
+
