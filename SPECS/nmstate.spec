@@ -4,11 +4,14 @@
 
 Name:           nmstate
 Version:        2.2.60
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
 Source0:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz
+# Keep patch until rebase to 2.2.62
+Patch0002:      0002-ip-Allow-ignoring-IP-address-with-other-protocol.patch
+
 Source1:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz.asc
 Source2:        https://nmstate.io/nmstate.gpg
 Source3:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-vendor-%{version}.tar.xz
@@ -164,6 +167,9 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Thu Sep 03 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.60-2
+- Ignore IP addresses with non-kernel IFA_PROTO. RHEL-253623
+
 * Thu May 06 2026 Ján Václav <jvaclav@redhat.com> - 2.2.60-1
 - Upgrade to 2.2.60
 - ipv4: Add new parameter prefix-route-metric RHEL-170695
