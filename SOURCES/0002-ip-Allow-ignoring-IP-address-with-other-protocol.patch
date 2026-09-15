@@ -1,0 +1,910 @@
+From c82545eae4ffa58ef1961eb2034e4a2b46f4f1a5 Mon Sep 17 00:00:00 2001
+From: Gris Ge <fge@redhat.com>
+Date: Tue, 3 Feb 2026 13:48:32 +0800
+Subject: [PATCH] ip: Allow ignoring IP address with other protocol
+
+Introduce a query-only `protocol` property for IP addresses. Addresses
+with an "other" (non-kernel) protocol are assigned by external tools
+like OVN and must not be persisted into NM configuration, so ignore
+them in desired state and when preserving addresses during route
+changes.
+
+Resolves: https://redhat.atlassian.net/browse/RHEL-243331
+
+Signed-off-by: Gris Ge <fge@redhat.com>
+Signed-off-by: Josephine Pfeiffer <josie@redhat.com>
+
+Resolved Conflicts:
+  rust/src/lib/ip.rs
+  rust/src/lib/unit_tests/ip.rs
+
+(cherry picked from commit 3bbac32aa342409d575060667e2cb6dd26c9ba7e)
+---
+ rust/src/lib/ip.rs                          | 188 ++++++++++++++++++--
+ rust/src/lib/lib.rs                         |   4 +-
+ rust/src/lib/nispor/ip.rs                   |  42 ++++-
+ rust/src/lib/nm/route.rs                    |  16 ++
+ rust/src/lib/nm/settings/connection.rs      |  16 ++
+ rust/src/lib/query_apply/ip.rs              |  26 ++-
+ rust/src/lib/unit_tests/ip.rs               | 137 +++++++++++++-
+ rust/src/python/libnmstate/schema.py        |   1 +
+ tests/integration/nm/route_test.py          | 133 ++++++++++++++
+ tests/integration/static_ip_address_test.py |  46 +++++
+ 10 files changed, 574 insertions(+), 35 deletions(-)
+
+diff --git a/rust/src/lib/ip.rs b/rust/src/lib/ip.rs
+index ef6cec8f..497b6972 100644
+--- a/rust/src/lib/ip.rs
++++ b/rust/src/lib/ip.rs
+@@ -250,6 +250,7 @@ impl InterfaceIpv4 {
+                     a.valid_life_time = None;
+                     a.preferred_life_time = None;
+                 });
++                addrs.retain(|addr| !addr.is_protocol_other());
+             }
+         }
+     }
+@@ -353,6 +354,7 @@ impl InterfaceIpv4 {
+     // * Set DHCP options to None if DHCP is false
+     // * Remove mptcp_flags is they are for query only
+     // * Validate auto metric and prefix metric
++    // * Remove address holding protocol: `AddressProtocol::Other(d)`
+     pub(crate) fn sanitize(
+         &mut self,
+         is_desired: bool,
+@@ -461,6 +463,19 @@ impl InterfaceIpv4 {
+             self.dhcp_custom_hostname = None;
+         }
+         if let Some(addrs) = self.addresses.as_mut() {
++            addrs.retain(|addr| {
++                let Some(AddressProtocol::Other(d)) = addr.protocol else {
++                    return true;
++                };
++                if is_desired {
++                    log::warn!(
++                        "Ignoring IPv4 address {}/{} with protocol: 0x{d:x}",
++                        addr.ip,
++                        addr.prefix_length
++                    );
++                }
++                false
++            });
+             for addr in addrs.iter_mut() {
+                 addr.mptcp_flags = None;
+             }
+@@ -730,22 +745,31 @@ impl InterfaceIpv6 {
+ 
+         if let Some(addrs) = self.addresses.as_mut() {
+             addrs.retain(|addr| {
+-                if let IpAddr::V6(ip_addr) = addr.ip {
+-                    if is_ipv6_unicast_link_local(&ip_addr) {
+-                        if is_desired {
+-                            log::warn!(
+-                                "Ignoring IPv6 link local address {}/{}",
+-                                &addr.ip,
+-                                addr.prefix_length
+-                            );
+-                        }
+-                        false
+-                    } else {
+-                        true
++                let IpAddr::V6(ip_addr) = addr.ip else {
++                    return false;
++                };
++                if is_ipv6_unicast_link_local(&ip_addr) {
++                    if is_desired {
++                        log::warn!(
++                            "Ignoring IPv6 link local address {}/{}",
++                            addr.ip,
++                            addr.prefix_length
++                        );
+                     }
+-                } else {
+-                    false
++                    return false;
+                 }
++                if let Some(AddressProtocol::Other(d)) = addr.protocol {
++                    if is_desired {
++                        log::warn!(
++                            "Ignoring IPv6 address {}/{} with protocol: \
++                             0x{d:x}",
++                            addr.ip,
++                            addr.prefix_length
++                        );
++                    }
++                    return false;
++                }
++                true
+             })
+         };
+ 
+@@ -859,6 +883,7 @@ impl InterfaceIpv6 {
+                     a.valid_life_time = None;
+                     a.preferred_life_time = None;
+                 });
++                addrs.retain(|addr| !addr.is_protocol_other());
+             }
+         }
+     }
+@@ -993,6 +1018,18 @@ pub struct InterfaceIpAddr {
+         alias = "preferred-lft"
+     )]
+     pub preferred_life_time: Option<String>,
++    /// IP address protocol.
++    /// This property is query only, nmstate will not set protocol for desired
++    /// IP address yet.
++    /// Nmstate will not preserve IP address holding
++    /// `AddressProtocol::Other(d)` from current state during apply action
++    /// because they are considered to be managed by external tools.
++    #[serde(
++        skip_serializing_if = "Option::is_none",
++        default,
++        deserialize_with = "crate::deserializer::option_enum_string_or_integer"
++    )]
++    pub protocol: Option<AddressProtocol>,
+ }
+ 
+ impl Default for InterfaceIpAddr {
+@@ -1003,6 +1040,7 @@ impl Default for InterfaceIpAddr {
+             mptcp_flags: None,
+             valid_life_time: None,
+             preferred_life_time: None,
++            protocol: None,
+         }
+     }
+ }
+@@ -1029,6 +1067,12 @@ impl InterfaceIpAddr {
+         self.valid_life_time.is_some()
+             && self.valid_life_time.as_deref() != Some(FOREVER)
+     }
++
++    // Address managed by external tool (e.g. OVN), should not be stored
++    // into NM configuration.
++    pub(crate) fn is_protocol_other(&self) -> bool {
++        matches!(self.protocol, Some(AddressProtocol::Other(_)))
++    }
+ }
+ 
+ pub(crate) fn is_ipv6_addr(addr: &str) -> bool {
+@@ -1073,6 +1117,7 @@ impl std::convert::TryFrom<&str> for InterfaceIpAddr {
+             mptcp_flags: None,
+             valid_life_time: None,
+             preferred_life_time: None,
++            protocol: None,
+         })
+     }
+ }
+@@ -1464,7 +1509,11 @@ fn sanitize_ipv6_token_to_string(
+ fn is_ip_addrs_none_or_all_auto(addrs: Option<&[InterfaceIpAddr]>) -> bool {
+     addrs.is_none_or(|addrs| {
+         addrs.iter().all(|a| {
+-            if let IpAddr::V6(ip_addr) = a.ip {
++            // Other protocol address is ignored during apply, hence should
++            // not block the auto to static conversion
++            if a.is_protocol_other() {
++                true
++            } else if let IpAddr::V6(ip_addr) = a.ip {
+                 is_ipv6_unicast_link_local(&ip_addr) || a.is_auto()
+             } else {
+                 a.is_auto()
+@@ -1499,3 +1548,112 @@ fn apply_ip_prefix_len(ip: IpAddr, prefix_length: usize) -> IpAddr {
+         .into(),
+     }
+ }
++
++#[derive(
++    Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize,
++)]
++#[serde(into = "String")]
++#[non_exhaustive]
++pub enum AddressProtocol {
++    Loopback,
++    RouterAnnouncement,
++    LinkLocal,
++    Other(u8),
++}
++
++impl From<AddressProtocol> for String {
++    fn from(v: AddressProtocol) -> Self {
++        v.to_string()
++    }
++}
++
++// Using iproute string here
++impl std::fmt::Display for AddressProtocol {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        match self {
++            Self::Loopback => write!(f, "lo"),
++            Self::RouterAnnouncement => write!(f, "ra"),
++            Self::LinkLocal => write!(f, "kernel_ll"),
++            Self::Other(d) => write!(f, "0x{d:x}"),
++        }
++    }
++}
++
++impl std::convert::TryFrom<&str> for AddressProtocol {
++    type Error = NmstateError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Ok(match value {
++            "lo" => Self::Loopback,
++            "ra" => Self::RouterAnnouncement,
++            "kernel_ll" => Self::LinkLocal,
++            v => {
++                let (digits, radix) = match v.strip_prefix("0x") {
++                    Some(s) => (s, 16),
++                    None => (v, 10),
++                };
++                u8::from_str_radix(digits, radix)
++                    .map_err(|_| {
++                        NmstateError::new(
++                            ErrorKind::InvalidArgument,
++                            format!(
++                                "Invalid address protocol '{v}', should be \
++                                 lo, ra, kernel_ll or integer from 0 to 255 \
++                                 (decimal or 0x hex)"
++                            ),
++                        )
++                    })?
++                    .into()
++            }
++        })
++    }
++}
++
++#[cfg(feature = "query_apply")]
++impl From<nispor::AddressProtocol> for AddressProtocol {
++    fn from(d: nispor::AddressProtocol) -> Self {
++        match d {
++            nispor::AddressProtocol::Loopback => Self::Loopback,
++            nispor::AddressProtocol::RouterAnnouncement => {
++                Self::RouterAnnouncement
++            }
++            nispor::AddressProtocol::LinkLocal => Self::LinkLocal,
++            _ => Self::Other(u8::from(d)),
++        }
++    }
++}
++
++const IFAPROT_KERNEL_LO: u8 = 1;
++const IFAPROT_KERNEL_RA: u8 = 2;
++const IFAPROT_KERNEL_LL: u8 = 3;
++
++impl From<u8> for AddressProtocol {
++    fn from(d: u8) -> Self {
++        match d {
++            IFAPROT_KERNEL_LO => Self::Loopback,
++            IFAPROT_KERNEL_RA => Self::RouterAnnouncement,
++            IFAPROT_KERNEL_LL => Self::LinkLocal,
++            _ => Self::Other(d),
++        }
++    }
++}
++
++impl<'de> Deserialize<'de> for AddressProtocol {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let s = match serde_json::Value::deserialize(deserializer)? {
++            serde_json::Value::String(s) => s,
++            serde_json::Value::Number(n) => n.to_string(),
++            v => {
++                return Err(serde::de::Error::custom(format!(
++                    "Invalid address protocol '{v}', should be lo, ra, \
++                     kernel_ll or integer from 0 to 255 (decimal or 0x hex)"
++                )));
++            }
++        };
++        Self::try_from(s.as_str())
++            .map_err(|e| serde::de::Error::custom(e.to_string()))
++    }
++}
+diff --git a/rust/src/lib/lib.rs b/rust/src/lib/lib.rs
+index 2c5deab0..61b64018 100644
+--- a/rust/src/lib/lib.rs
++++ b/rust/src/lib/lib.rs
+@@ -166,8 +166,8 @@ pub use crate::{
+         VxlanConfig, VxlanInterface, XfrmInterface,
+     },
+     ip::{
+-        AddressFamily, Dhcpv4ClientId, Dhcpv6Duid, InterfaceIpAddr,
+-        InterfaceIpv4, InterfaceIpv6, Ipv6AddrGenMode, WaitIp,
++        AddressFamily, AddressProtocol, Dhcpv4ClientId, Dhcpv6Duid,
++        InterfaceIpAddr, InterfaceIpv4, InterfaceIpv6, Ipv6AddrGenMode, WaitIp,
+     },
+     lldp::{
+         LldpAddressFamily, LldpChassisId, LldpChassisIdType, LldpConfig,
+diff --git a/rust/src/lib/nispor/ip.rs b/rust/src/lib/nispor/ip.rs
+index 90ec6a57..b3645b23 100644
+--- a/rust/src/lib/nispor/ip.rs
++++ b/rust/src/lib/nispor/ip.rs
+@@ -3,8 +3,8 @@
+ use std::str::FromStr;
+ 
+ use crate::{
+-    InterfaceIpAddr, InterfaceIpv4, InterfaceIpv6, MergedInterface,
+-    nispor::mptcp::get_mptcp_flags,
++    AddressProtocol, InterfaceIpAddr, InterfaceIpv4, InterfaceIpv6,
++    MergedInterface, nispor::mptcp::get_mptcp_flags,
+ };
+ 
+ pub(crate) fn np_ipv4_to_nmstate(
+@@ -53,6 +53,7 @@ pub(crate) fn np_ipv4_to_nmstate(
+                     } else {
+                         None
+                     },
++                    protocol: np_addr.protocol.map(AddressProtocol::from),
+                     ..Default::default()
+                 }),
+                 Err(e) => {
+@@ -127,6 +128,7 @@ pub(crate) fn np_ipv6_to_nmstate(
+                     } else {
+                         None
+                     },
++                    protocol: np_addr.protocol.map(AddressProtocol::from),
+                     ..Default::default()
+                 }),
+                 Err(e) => {
+@@ -162,15 +164,29 @@ pub(crate) fn nmstate_ipv4_to_np(
+             &nms_merged_iface.merged.base_iface().ipv4,
+         )
+     {
+-        let des_ips: Vec<_> = nms_des_ipv4
++        // Compare without query-only protocol, else the kernel-assigned tag
++        // alone marks an address for removal
++        let des_ips: Vec<InterfaceIpAddr> = nms_des_ipv4
+             .addresses
+             .as_deref()
+             .unwrap_or_default()
+             .iter()
++            .cloned()
++            .map(|mut a| {
++                a.protocol = None;
++                a
++            })
+             .collect();
+ 
+         for nms_addr in nms_cur_ipv4.addresses.as_deref().unwrap_or_default() {
+-            if !des_ips.contains(&nms_addr) {
++            // Address managed by external tool, sanitize removed it from
++            // desired state, but it should stay in kernel
++            if nms_addr.is_protocol_other() {
++                continue;
++            }
++            let mut cmp_addr = nms_addr.clone();
++            cmp_addr.protocol = None;
++            if !des_ips.contains(&cmp_addr) {
+                 np_ip_conf.addresses.push({
+                     let mut ip_conf = nispor::IpAddrConf::default();
+                     ip_conf.address = nms_addr.ip.to_string();
+@@ -208,15 +224,29 @@ pub(crate) fn nmstate_ipv6_to_np(
+             &nms_merged_iface.merged.base_iface().ipv6,
+         )
+     {
+-        let des_ips: Vec<_> = nms_des_ipv6
++        // Compare without query-only protocol, else the kernel-assigned tag
++        // alone marks an address for removal
++        let des_ips: Vec<InterfaceIpAddr> = nms_des_ipv6
+             .addresses
+             .as_deref()
+             .unwrap_or_default()
+             .iter()
++            .cloned()
++            .map(|mut a| {
++                a.protocol = None;
++                a
++            })
+             .collect();
+ 
+         for nms_addr in nms_cur_ipv6.addresses.as_deref().unwrap_or_default() {
+-            if !des_ips.contains(&nms_addr) {
++            // Address managed by external tool, sanitize removed it from
++            // desired state, but it should stay in kernel
++            if nms_addr.is_protocol_other() {
++                continue;
++            }
++            let mut cmp_addr = nms_addr.clone();
++            cmp_addr.protocol = None;
++            if !des_ips.contains(&cmp_addr) {
+                 np_ip_conf.addresses.push({
+                     let mut ip_conf = nispor::IpAddrConf::default();
+                     ip_conf.address = nms_addr.ip.to_string();
+diff --git a/rust/src/lib/nm/route.rs b/rust/src/lib/nm/route.rs
+index 4c4fd04a..17a514c8 100644
+--- a/rust/src/lib/nm/route.rs
++++ b/rust/src/lib/nm/route.rs
+@@ -26,12 +26,28 @@ pub(crate) fn store_route_config(
+                             .base_iface_mut()
+                             .ipv4
+                             .clone_from(&iface.merged.base_iface_mut().ipv4);
++                        if let Some(addrs) = apply_iface
++                            .base_iface_mut()
++                            .ipv4
++                            .as_mut()
++                            .and_then(|i| i.addresses.as_mut())
++                        {
++                            addrs.retain(|addr| !addr.is_protocol_other());
++                        }
+                     }
+                     if apply_iface.base_iface_mut().ipv6.is_none() {
+                         apply_iface
+                             .base_iface_mut()
+                             .ipv6
+                             .clone_from(&iface.merged.base_iface_mut().ipv6);
++                        if let Some(addrs) = apply_iface
++                            .base_iface_mut()
++                            .ipv6
++                            .as_mut()
++                            .and_then(|i| i.addresses.as_mut())
++                        {
++                            addrs.retain(|addr| !addr.is_protocol_other());
++                        }
+                     }
+                     apply_iface.base_iface_mut().routes = Some(rts.clone());
+                 }
+diff --git a/rust/src/lib/nm/settings/connection.rs b/rust/src/lib/nm/settings/connection.rs
+index 2537482b..9f61e19b 100644
+--- a/rust/src/lib/nm/settings/connection.rs
++++ b/rust/src/lib/nm/settings/connection.rs
+@@ -471,9 +471,25 @@ fn preserve_current_ip(iface: &mut Interface, cur_iface: Option<&Interface>) {
+     if iface.base_iface().ipv4.is_none() {
+         iface.base_iface_mut().ipv4 =
+             cur_iface.as_ref().and_then(|i| i.base_iface().ipv4.clone());
++        if let Some(addrs) = iface
++            .base_iface_mut()
++            .ipv4
++            .as_mut()
++            .and_then(|ip| ip.addresses.as_mut())
++        {
++            addrs.retain(|addr| !addr.is_protocol_other())
++        }
+     }
+     if iface.base_iface().ipv6.is_none() {
+         iface.base_iface_mut().ipv6 =
+             cur_iface.as_ref().and_then(|i| i.base_iface().ipv6.clone());
++        if let Some(addrs) = iface
++            .base_iface_mut()
++            .ipv6
++            .as_mut()
++            .and_then(|ip| ip.addresses.as_mut())
++        {
++            addrs.retain(|addr| !addr.is_protocol_other())
++        }
+     }
+ }
+diff --git a/rust/src/lib/query_apply/ip.rs b/rust/src/lib/query_apply/ip.rs
+index 0ea958a5..4aae3579 100644
+--- a/rust/src/lib/query_apply/ip.rs
++++ b/rust/src/lib/query_apply/ip.rs
+@@ -1,13 +1,24 @@
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-use crate::{Interface, InterfaceIpv4, InterfaceIpv6, RouteEntry};
++use crate::{
++    Interface, InterfaceIpAddr, InterfaceIpv4, InterfaceIpv6, RouteEntry,
++};
++
++// Protocol is query only, keeping it would break the address equality
++// used by process_allow_extra_address()
++fn sanitize_addrs_for_verify(addrs: &mut Vec<InterfaceIpAddr>) {
++    for addr in addrs.iter_mut() {
++        addr.protocol = None;
++    }
++    addrs.sort_unstable();
++    addrs.dedup();
++}
+ 
+ impl InterfaceIpv4 {
+     // Sort addresses and dedup
+     pub(crate) fn sanitize_current_for_verify(&mut self) {
+         if let Some(addrs) = self.addresses.as_mut() {
+-            addrs.sort_unstable();
+-            addrs.dedup();
++            sanitize_addrs_for_verify(addrs);
+         }
+         if self.dhcp_custom_hostname.is_none() {
+             self.dhcp_custom_hostname = Some(String::new());
+@@ -32,8 +43,7 @@ impl InterfaceIpv4 {
+                 // false as it might varied depend on whether have route on it
+                 self.enabled_defined = false;
+             } else {
+-                addrs.sort_unstable();
+-                addrs.dedup();
++                sanitize_addrs_for_verify(addrs);
+             }
+         }
+         // We do not verify prefix_route_metric or auto_route_metric if set to
+@@ -103,8 +113,7 @@ impl InterfaceIpv6 {
+     // Sort addresses and dedup
+     pub(crate) fn sanitize_current_for_verify(&mut self) {
+         if let Some(addrs) = self.addresses.as_mut() {
+-            addrs.sort_unstable();
+-            addrs.dedup();
++            sanitize_addrs_for_verify(addrs);
+         }
+ 
+         // None IPv6 token should be treat as "::"
+@@ -134,8 +143,7 @@ impl InterfaceIpv6 {
+     // Sort addresses and dedup
+     pub(crate) fn sanitize_desired_for_verify(&mut self) {
+         if let Some(addrs) = self.addresses.as_mut() {
+-            addrs.sort_unstable();
+-            addrs.dedup();
++            sanitize_addrs_for_verify(addrs);
+         }
+     }
+     pub(crate) fn update(&mut self, other: &Self) {
+diff --git a/rust/src/lib/unit_tests/ip.rs b/rust/src/lib/unit_tests/ip.rs
+index 80610104..9766ae03 100644
+--- a/rust/src/lib/unit_tests/ip.rs
++++ b/rust/src/lib/unit_tests/ip.rs
+@@ -1,9 +1,9 @@
+ // SPDX-License-Identifier: Apache-2.0
+ 
+ use crate::{
+-    BaseInterface, ErrorKind, Interface, InterfaceState, Interfaces,
+-    MergedInterfaces, RouteEntry, ip::sanitize_ip_network,
+-    unit_tests::testlib::new_eth_iface,
++    AddressProtocol, BaseInterface, ErrorKind, Interface, InterfaceIpv4,
++    InterfaceState, Interfaces, MergedInterfaces, RouteEntry,
++    ip::sanitize_ip_network, unit_tests::testlib::new_eth_iface,
+ };
+ 
+ fn gen_test_eth_ifaces() -> Interfaces {
+@@ -727,3 +727,134 @@ fn test_error_on_route_metric_out_of_range() {
+         }
+     }
+ }
++
++#[test]
++fn test_address_protocol_parse() {
++    let ipv4: InterfaceIpv4 = serde_yaml::from_str(
++        r#"---
++enabled: true
++dhcp: false
++address:
++- ip: "192.0.2.1"
++  prefix-length: 24
++  protocol: lo
++- ip: "192.0.2.2"
++  prefix-length: 24
++  protocol: ra
++- ip: "192.0.2.3"
++  prefix-length: 24
++  protocol: kernel_ll
++- ip: "192.0.2.4"
++  prefix-length: 24
++  protocol: "0x54"
++- ip: "192.0.2.5"
++  prefix-length: 24
++  protocol: 84
++"#,
++    )
++    .unwrap();
++
++    let protocols: Vec<_> = ipv4
++        .addresses
++        .as_deref()
++        .unwrap()
++        .iter()
++        .map(|a| a.protocol)
++        .collect();
++    assert_eq!(
++        protocols,
++        vec![
++            Some(AddressProtocol::Loopback),
++            Some(AddressProtocol::RouterAnnouncement),
++            Some(AddressProtocol::LinkLocal),
++            Some(AddressProtocol::Other(0x54)),
++            Some(AddressProtocol::Other(84)),
++        ]
++    );
++}
++
++#[test]
++fn test_address_protocol_invalid() {
++    for protocol in ["bogus", "\"0x1ff\"", "300", "-1"] {
++        let result: Result<InterfaceIpv4, _> = serde_yaml::from_str(&format!(
++            r#"---
++enabled: true
++dhcp: false
++address:
++- ip: "192.0.2.1"
++  prefix-length: 24
++  protocol: {protocol}
++"#
++        ));
++        assert!(result.is_err(), "protocol {protocol} should fail to parse");
++    }
++}
++
++#[test]
++fn test_sanitize_desired_remove_other_protocol_address() {
++    let mut ipv4: InterfaceIpv4 = serde_yaml::from_str(
++        r#"---
++enabled: true
++dhcp: false
++address:
++- ip: "192.0.2.1"
++  prefix-length: 24
++- ip: "192.0.2.2"
++  prefix-length: 24
++  protocol: "0x54"
++"#,
++    )
++    .unwrap();
++
++    ipv4.sanitize(true).unwrap();
++
++    let addrs = ipv4.addresses.as_deref().unwrap();
++    assert_eq!(addrs.len(), 1);
++    assert_eq!(addrs[0].ip.to_string(), "192.0.2.1");
++}
++
++#[test]
++fn test_verify_ignore_current_address_protocol() {
++    let desired: Interfaces = serde_yaml::from_str(
++        r#"---
++- name: eth1
++  type: ethernet
++  state: up
++  ipv4:
++    enabled: "true"
++    dhcp: "false"
++    address:
++    - ip: "192.168.1.1"
++      prefix-length: "24"
++"#,
++    )
++    .unwrap();
++    let current: Interfaces = serde_yaml::from_str(
++        r#"---
++- name: eth1
++  type: ethernet
++  state: up
++  ipv4:
++    enabled: "true"
++    dhcp: "false"
++    address:
++    - ip: "192.168.1.1"
++      prefix-length: "24"
++      protocol: lo
++    - ip: "192.168.1.2"
++      prefix-length: "24"
++      protocol: "0x54"
++"#,
++    )
++    .unwrap();
++
++    let merged_ifaces = MergedInterfaces::new(
++        desired,
++        gen_test_eth_ifaces(),
++        Default::default(),
++        false,
++    )
++    .unwrap();
++
++    merged_ifaces.verify(&current).unwrap();
++}
+diff --git a/rust/src/python/libnmstate/schema.py b/rust/src/python/libnmstate/schema.py
+index eff7ceb7..99af6563 100644
+--- a/rust/src/python/libnmstate/schema.py
++++ b/rust/src/python/libnmstate/schema.py
+@@ -174,6 +174,7 @@ class InterfaceIP:
+     DHCP_SEND_HOSTNAME = "dhcp-send-hostname"
+     DHCP_CUSTOM_HOSTNAME = "dhcp-custom-hostname"
+     PREFIX_ROUTE_METRIC = "prefix-route-metric"
++    PROTOCOL = "protocol"
+ 
+ 
+ class InterfaceIPv4(InterfaceIP):
+diff --git a/tests/integration/nm/route_test.py b/tests/integration/nm/route_test.py
+index f8481be7..ef1497c1 100644
+--- a/tests/integration/nm/route_test.py
++++ b/tests/integration/nm/route_test.py
+@@ -22,10 +22,12 @@ from libnmstate.error import NmstateVerificationError
+ 
+ IPV4_ADDRESS1 = "192.0.2.251"
+ IPV4_ADDRESS2 = "192.0.2.252"
++IPV4_ADDRESS3 = "192.0.2.253"
+ IPV4_TEST_NET1 = "203.0.113.0/24"
+ IPV4_GATEWAY1 = "192.0.2.1"
+ IPV6_ADDRESS1 = "2001:db8:1::1"
+ IPV6_ADDRESS2 = "2001:db8:1::2"
++IPV6_ADDRESS3 = "2001:db8:1::3"
+ IPV6_TEST_NET1 = "2001:db8:e::/64"
+ IPV6_GATEWAY1 = "2001:db8:1::f"
+ TEST_GATEAY4 = "192.0.2.1"
+@@ -488,3 +490,134 @@ def test_apply_absent_routes_to_ignored_iface(
+             and route[Route.DESTINATION] == IPV6_TEST_NET1
+             for route in routes
+         )
++
++
++@pytest.fixture
++def external_managed_dummy1_with_static_ip_and_other_protocol_addr():
++    with nm_unmanaged_dummy(DUMMY1):
++        exec_cmd(
++            f"ip addr add {IPV4_ADDRESS1} dev {DUMMY1}".split(),
++            check=True,
++        )
++        exec_cmd(
++            f"ip addr add {IPV4_ADDRESS3} proto 84 dev {DUMMY1}".split(),
++            check=True,
++        )
++        exec_cmd(
++            f"ip addr add {IPV6_ADDRESS1} dev {DUMMY1}".split(),
++            check=True,
++        )
++        exec_cmd(
++            f"ip addr add {IPV6_ADDRESS3} proto 84 dev {DUMMY1}".split(),
++            check=True,
++        )
++        exec_cmd(f"nmcli d set {DUMMY1} managed true".split(), check=True)
++        yield
++
++
++@pytest.mark.tier1
++def test_modify_route_of_ext_iface_should_ignore_other_protocol_addr(
++    external_managed_dummy1_with_static_ip_and_other_protocol_addr,
++):
++    desired_routes = [
++        {
++            Route.NEXT_HOP_INTERFACE: DUMMY1,
++            Route.DESTINATION: IPV4_TEST_NET1,
++            Route.NEXT_HOP_ADDRESS: IPV4_ADDRESS2,
++            Route.TABLE_ID: 254,
++        },
++        {
++            Route.NEXT_HOP_INTERFACE: DUMMY1,
++            Route.DESTINATION: IPV6_TEST_NET1,
++            Route.NEXT_HOP_ADDRESS: IPV6_ADDRESS2,
++            Route.TABLE_ID: 254,
++        },
++    ]
++    libnmstate.apply({Route.KEY: {Route.CONFIG: desired_routes}})
++
++    cur_state = libnmstate.show()
++    assert_routes(desired_routes, cur_state)
++
++    ipv4_conf = exec_cmd(
++        f"nmcli -f ipv4.addresses c show {DUMMY1}".split(), check=True
++    )[1]
++    ipv6_conf = exec_cmd(
++        f"nmcli -f ipv6.addresses c show {DUMMY1}".split(), check=True
++    )[1]
++    assert IPV4_ADDRESS1 in ipv4_conf
++    assert IPV4_ADDRESS3 not in ipv4_conf
++    assert IPV6_ADDRESS1 in ipv6_conf
++    assert IPV6_ADDRESS3 not in ipv6_conf
++
++
++@pytest.fixture
++def eth1_with_static_ip_and_other_protocol_addr(eth1_up):
++    libnmstate.apply(
++        yaml.load(
++            f"""---
++            interfaces:
++            - name: eth1
++              state: up
++              ipv4:
++                address:
++                - ip: {IPV4_ADDRESS1}
++                  prefix-length: 24
++                dhcp: false
++                enabled: true
++              ipv6:
++                address:
++                  - ip: {IPV6_ADDRESS1}
++                    prefix-length: 64
++                autoconf: false
++                dhcp: false
++                enabled: true
++            """,
++            Loader=yaml.SafeLoader,
++        )
++    )
++    exec_cmd(
++        f"ip addr add {IPV4_ADDRESS3} proto 84 dev eth1".split(),
++        check=True,
++    )
++    exec_cmd(
++        f"ip addr add {IPV6_ADDRESS3} proto 84 dev eth1".split(),
++        check=True,
++    )
++    yield
++
++
++@pytest.mark.tier1
++def test_modify_route_of_iface_should_ignore_other_protocol_addr(
++    eth1_with_static_ip_and_other_protocol_addr,
++):
++    desired_routes = [
++        {
++            Route.NEXT_HOP_INTERFACE: "eth1",
++            Route.DESTINATION: IPV4_TEST_NET1,
++            Route.NEXT_HOP_ADDRESS: IPV4_ADDRESS2,
++            Route.TABLE_ID: 254,
++        },
++        {
++            Route.NEXT_HOP_INTERFACE: "eth1",
++            Route.DESTINATION: IPV6_TEST_NET1,
++            Route.NEXT_HOP_ADDRESS: IPV6_ADDRESS2,
++            Route.TABLE_ID: 254,
++        },
++    ]
++    libnmstate.apply({Route.KEY: {Route.CONFIG: desired_routes}})
++
++    cur_state = libnmstate.show()
++    assert_routes(desired_routes, cur_state)
++
++    ipv4_conf = exec_cmd(
++        "nmcli -f ipv4.addresses c show eth1".split(), check=True
++    )[1]
++    ipv6_conf = exec_cmd(
++        "nmcli -f ipv6.addresses c show eth1".split(), check=True
++    )[1]
++    # NM's reapply prunes addresses absent from the profile unless Reapply()
++    # gets the preserve-external-ip flag.
++    assert IPV4_ADDRESS1 in ipv4_conf
++    assert IPV4_ADDRESS3 not in ipv4_conf
++    assert IPV6_ADDRESS1 in ipv6_conf
++    assert IPV6_ADDRESS3 not in ipv6_conf
+diff --git a/tests/integration/static_ip_address_test.py b/tests/integration/static_ip_address_test.py
+index 0cbb4be8..4773e62c 100644
+--- a/tests/integration/static_ip_address_test.py
++++ b/tests/integration/static_ip_address_test.py
+@@ -1299,3 +1299,49 @@ def test_kernel_mode_change_static_ip(cleanup_veth1_kernel_mode):
+         kernel_only=True,
+     )
+     assertlib.assert_state_match(new_desired_state, kernel_only=True)
++
++
++def test_ignore_ip_addr_with_other_protocol(eth1_up):
++    desired_state = load_yaml(
++        """---
++        interfaces:
++        - name: eth1
++          type: ethernet
++          state: up
++          ipv4:
++            address:
++            - ip: 192.0.2.251
++              prefix-length: 24
++            - ip: 192.0.2.250
++              prefix-length: 24
++              protocol: 0x84
++            dhcp: false
++            enabled: true
++          ipv6:
++            enabled: true
++            autoconf: false
++            dhcp: false
++            address:
++              - ip: 2001:db8:1::1
++                prefix-length: 64
++              - ip: 2001:db8:1::2
++                prefix-length: 64
++                protocol: 0x84
++        """
++    )
++    libnmstate.apply(desired_state)
++
++    cur_state = statelib.show_only(("eth1",))[Interface.KEY][0]
++    cur_ipv4_addrs = [
++        addr[InterfaceIPv4.ADDRESS_IP]
++        for addr in cur_state[Interface.IPV4][InterfaceIPv4.ADDRESS]
++    ]
++    cur_ipv6_addrs = [
++        addr[InterfaceIPv6.ADDRESS_IP]
++        for addr in cur_state[Interface.IPV6][InterfaceIPv6.ADDRESS]
++    ]
++
++    assert "192.0.2.251" in cur_ipv4_addrs
++    assert "192.0.2.250" not in cur_ipv4_addrs
++    assert "2001:db8:1::1" in cur_ipv6_addrs
++    assert "2001:db8:1::2" not in cur_ipv6_addrs
+-- 
+2.54.0
+
