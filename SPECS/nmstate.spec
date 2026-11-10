@@ -3,19 +3,28 @@
 %define libname libnmstate
 
 Name:           nmstate
-Version:        2.2.60
+Version:        2.2.61
 Release:        2%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
+
 Source0:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz
-# Keep patch until rebase to 2.2.62
-Patch0002:      0002-ip-Allow-ignoring-IP-address-with-other-protocol.patch
+# Keep these patches until next rebase
+Patch2:         0002-iface-include-existing-interfaces-in-name-search.patch
+Patch0003:      0003-nispor-derive-alt-name-link-match-from-interface-ide.patch
+Patch0004:      0004-nispor-keep-OriginalName-link-match-for-stacked-inte.patch
+Patch0005:      0005-nispor-pin-physical-non-ethernet-alt-name-match-to-o.patch
+Patch0006:      0006-nispor-skip-alt-name-removal-for-deleted-virtual-int.patch
 
 Source1:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz.asc
 Source2:        https://nmstate.io/nmstate.gpg
+
 Source3:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-vendor-%{version}.tar.xz
+# Vendored dependency patch, see %prep section for more details
+# on how it's applied.
 Patch1:         0001-nispor-fix-ipoib-iface-type.patch
+
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  gnupg2
@@ -167,16 +176,26 @@ popd
 /sbin/ldconfig
 
 %changelog
-* Thu Sep 03 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.60-2
-- Ignore IP addresses with non-kernel IFA_PROTO. RHEL-253623
+* Wed Jul 29 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.61-2
+- Fix copy-mac-from failing when source interface is down. RHEL-214096
 
-* Thu May 06 2026 Ján Václav <jvaclav@redhat.com> - 2.2.60-1
+* Thu Jul 23 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.61-1
+- Upgrade to 2.2.61
+- Support referring alt-name in `copy-mac-from` property. RHEL-214096
+- Fix validation of conflicting routes in kernel mode. RHEL-214095
+
+* Wed May 6 2026 Íñigo Huguet <ihuguet@redhat.com> - 2.2.60-2
+- Fix a bug in Nispor that causes not to recognize Infiniband devices (RHEL-173627)
+
+* Wed Apr 22 2026 Ján Václav <jvaclav@redhat.com> - 2.2.60-1
 - Upgrade to 2.2.60
-- ipv4: Add new parameter prefix-route-metric RHEL-170695
+- ipv4: Add new parameter prefix-route-metric RHEL-166365
+- Fix error when modify port list of down interfaces RHEL-166366
+- Add support for configuring ipip tunnel in nmstate RHEL-166367
 
-* Thu Mar 05 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.59-1
+* Tue Mar 3 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.59-1
 - Upgrade to 2.2.59
-- Add support for lock-mtu option. RHEL-151933.
+- route: add support for lock-mtu option. RHEL-151934
 
 * Wed Feb 11 2026 Mingyu Shi <mshi@redhat.com> - 2.2.58-1
 - Upgrade to 2.2.58
