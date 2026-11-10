@@ -1,0 +1,102 @@
+From 1527741c551a7ac54d5111ee264b3557fd3ad110 Mon Sep 17 00:00:00 2001
+From: Josephine Pfeiffer <josie@redhat.com>
+Date: Fri, 10 Jul 2026 14:56:09 +0200
+Subject: [PATCH 6/6] nispor: skip alt-name removal for deleted virtual
+ interfaces
+
+Deleting a virtual interface (e.g. a VLAN) that carries an nmstate-managed
+alt-name failed because NetworkManager removes the interface first, then the
+nispor alt-name removal runs against the now-absent interface and the kernel
+rejects it with EOPNOTSUPP.
+
+A deleted virtual interface takes its alt-names with it, so skip the removal.
+Physical interfaces survive state:absent, so they still get their alt-names
+cleared.
+
+Signed-off-by: Josephine Pfeiffer <josie@redhat.com>
+---
+ rust/src/lib/nispor/alt_name.rs    | 16 +++++++++----
+ tests/integration/alt_name_test.py | 36 ++++++++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+), 4 deletions(-)
+
+diff --git a/rust/src/lib/nispor/alt_name.rs b/rust/src/lib/nispor/alt_name.rs
+index 220e6919..3fc575f4 100644
+--- a/rust/src/lib/nispor/alt_name.rs
++++ b/rust/src/lib/nispor/alt_name.rs
+@@ -80,14 +80,22 @@ pub(crate) async fn apply_ifaces_alt_names(
+ 
+     for merged_iface in merged_ifaces.kernel_ifaces.values() {
+         let apply_iface = if let Some(i) = merged_iface.for_apply.as_ref() {
+-            i.base_iface()
++            i
+         } else {
+             continue;
+         };
+-        let cur_iface = merged_iface.current.as_ref().map(|i| i.base_iface());
+-        if let Some(np_iface) =
+-            gen_nispor_iface_conf_for_alt_name(apply_iface, cur_iface)?
++        // A virtual interface being deleted takes its alt-names with it, so
++        // skip the nispor removal, which would otherwise race the deletion.
++        if apply_iface.base_iface().state == InterfaceState::Absent
++            && apply_iface.is_virtual()
+         {
++            continue;
++        }
++        let cur_iface = merged_iface.current.as_ref().map(|i| i.base_iface());
++        if let Some(np_iface) = gen_nispor_iface_conf_for_alt_name(
++            apply_iface.base_iface(),
++            cur_iface,
++        )? {
+             np_ifaces.push(np_iface);
+         }
+     }
+diff --git a/tests/integration/alt_name_test.py b/tests/integration/alt_name_test.py
+index f53bfe62..df41f18e 100644
+--- a/tests/integration/alt_name_test.py
++++ b/tests/integration/alt_name_test.py
+@@ -276,6 +276,42 @@ class TestAltNames:
+                 [alt_name],
+             )
+ 
++    # https://issues.redhat.com/browse/RHEL-167955
++    @pytest.mark.tier1
++    def test_delete_vlan_on_bond_with_alt_name(self, eth1_up, eth2_up):
++        vlan_name = f"{TEST_BOND_NIC}.102"
++        link_file = f"/etc/systemd/network/98-nmstate-{vlan_name}.link"
++        with bond_interface(TEST_BOND_NIC, ["eth1", "eth2"]):
++            libnmstate.apply(
++                load_yaml(
++                    f"""---
++                    interfaces:
++                    - name: {vlan_name}
++                      type: vlan
++                      state: up
++                      vlan:
++                        base-iface: {TEST_BOND_NIC}
++                        id: 102
++                      alt-names:
++                      - name: altdel
++                    """
++                )
++            )
++            assert os.path.exists(link_file)
++            # Deleting the VLAN must not fail trying to remove an alt-name
++            # from an interface it just deleted; the link file goes with it.
++            libnmstate.apply(
++                load_yaml(
++                    f"""---
++                    interfaces:
++                    - name: {vlan_name}
++                      type: vlan
++                      state: absent
++                    """
++                )
++            )
++            assert not os.path.exists(link_file)
++
+     # https://issues.redhat.com/browse/RHEL-126508
+     @pytest.mark.tier1
+     def test_ref_alt_name_in_route(self, eth1_with_alt_names):
+-- 
+2.54.0
+

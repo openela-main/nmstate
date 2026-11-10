@@ -1,0 +1,134 @@
+From 69df418c0a918163d84cddaa0cf45e6c302c8103 Mon Sep 17 00:00:00 2001
+From: Jan Vaclav <jvaclav@redhat.com>
+Date: Wed, 29 Jul 2026 11:07:22 +0200
+Subject: [PATCH] iface: include existing interfaces in name search
+
+InterfaceNameSearch filtered kernel_nics to only up interfaces, which
+excluded existing interfaces that were not UP in the merged state,
+which broke copy-mac-from when referencing an interface that exists in
+current state but is being added as a bond/bridge port in the same
+transaction. The port's merged state isn't Up, so it gets filtered out
+of kernel_nics.
+
+Include all existing interfaces in kernel_nics, and only filter desired
+interfaces to those that will be up.
+
+Fixes: aaf11db38e97 ("iface: support matching against alt-name in copy-mac-from")
+Signed-off-by: Jan Vaclav <jvaclav@redhat.com>
+Assisted-by: Claude Sonnet 4.5
+---
+ rust/src/lib/ifaces/inter_ifaces.rs |  3 +-
+ rust/src/lib/unit_tests/alt_name.rs | 82 +++++++++++++++++++++++++++++
+ 2 files changed, 84 insertions(+), 1 deletion(-)
+
+diff --git a/rust/src/lib/ifaces/inter_ifaces.rs b/rust/src/lib/ifaces/inter_ifaces.rs
+index 09c5a10f82..76b83a273b 100644
+--- a/rust/src/lib/ifaces/inter_ifaces.rs
++++ b/rust/src/lib/ifaces/inter_ifaces.rs
+@@ -1248,7 +1248,7 @@ impl InterfaceNameSearch {
+     {
+         let mut kernel_nics: HashSet<String> = HashSet::new();
+ 
+-        for iface in merged_ifaces.clone().filter(|i| i.merged.is_up()) {
++        for iface in merged_ifaces.clone() {
+             if let Some(cur_iface) = iface.current.as_ref() {
+                 // Existing kernel interface
+                 kernel_nics.insert(cur_iface.name().to_string());
+@@ -1256,6 +1256,7 @@ impl InterfaceNameSearch {
+                 // Creating new kernel interface
+                 if des_iface.base_iface().identifier.as_ref()
+                     != Some(&InterfaceIdentifier::MacAddress)
++                    && des_iface.is_up()
+                 {
+                     kernel_nics.insert(des_iface.name().to_string());
+                 }
+diff --git a/rust/src/lib/unit_tests/alt_name.rs b/rust/src/lib/unit_tests/alt_name.rs
+index 4fa417df7c..8ff35f7d96 100644
+--- a/rust/src/lib/unit_tests/alt_name.rs
++++ b/rust/src/lib/unit_tests/alt_name.rs
+@@ -420,3 +420,85 @@ fn test_do_not_resolve_mac_identifer_iface_to_alt_name() {
+     assert!(merged_iface.for_verify.is_none());
+     assert!(merged_iface.desired.is_none());
+ }
++
++#[test]
++fn test_copy_mac_from_existing_down_port() {
++    let desired: NetworkState = serde_yaml::from_str(
++        r"---
++        interfaces:
++          - name: bond99
++            type: bond
++            state: up
++            copy-mac-from: eth1
++            link-aggregation:
++              mode: balance-rr
++              port:
++                - eth1
++                - eth2",
++    )
++    .unwrap();
++    let current: NetworkState = serde_yaml::from_str(
++        r"---
++        interfaces:
++          - name: eth1
++            type: ethernet
++            state: down
++            mac-address: AA:BB:CC:DD:EE:FF
++          - name: eth2
++            type: ethernet
++            state: up
++            mac-address: 11:22:33:44:55:66",
++    )
++    .unwrap();
++
++    let merged_state =
++        MergedNetworkState::new(desired, current, Default::default(), false)
++            .unwrap();
++
++    let bond_iface =
++        merged_state.interfaces.kernel_ifaces.get("bond99").unwrap();
++    let bond_mac = bond_iface
++        .for_apply
++        .as_ref()
++        .and_then(|i| i.base_iface().mac_address.as_ref());
++
++    assert_eq!(bond_mac, Some(&"AA:BB:CC:DD:EE:FF".to_string()));
++}
++
++#[test]
++fn test_copy_mac_from_new_down_interface_fails() {
++    let desired: NetworkState = serde_yaml::from_str(
++        r"---
++        interfaces:
++          - name: eth1
++            type: ethernet
++            state: down
++            mac-address: AA:BB:CC:DD:EE:FF
++          - name: bond99
++            type: bond
++            state: up
++            copy-mac-from: eth1
++            link-aggregation:
++              mode: balance-rr
++              port:
++                - eth2",
++    )
++    .unwrap();
++    let current: NetworkState = serde_yaml::from_str(
++        r"---
++        interfaces:
++          - name: eth2
++            type: ethernet
++            state: up
++            mac-address: 11:22:33:44:55:66",
++    )
++    .unwrap();
++
++    let result =
++        MergedNetworkState::new(desired, current, Default::default(), false);
++
++    let e = result.unwrap_err();
++    assert_eq!(e.kind(), ErrorKind::InvalidArgument);
++    assert!(e.msg().contains("eth1"));
++    assert!(e.msg().contains("copy-mac-from"));
++}
