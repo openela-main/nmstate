@@ -4,7 +4,7 @@
 
 Name:           nmstate
 Version:        2.2.61
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Declarative network manager API
 License:        LGPLv2+
 URL:            https://github.com/%{srcname}/%{srcname}
@@ -16,6 +16,7 @@ Patch0003:      0003-nispor-derive-alt-name-link-match-from-interface-ide.patch
 Patch0004:      0004-nispor-keep-OriginalName-link-match-for-stacked-inte.patch
 Patch0005:      0005-nispor-pin-physical-non-ethernet-alt-name-match-to-o.patch
 Patch0006:      0006-nispor-skip-alt-name-removal-for-deleted-virtual-int.patch
+Patch0007:      0007-ip-Allow-ignoring-IP-address-with-other-protocol.patch
 
 Source1:        https://github.com/nmstate/nmstate/releases/download/v%{version}/nmstate-%{version}.tar.gz.asc
 Source2:        https://nmstate.io/nmstate.gpg
@@ -176,6 +177,9 @@ popd
 /sbin/ldconfig
 
 %changelog
+* Fri Sep 04 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.61-3
+- Ignore IP addresses with non-kernel IFA_PROTO. RHEL-253624
+
 * Wed Jul 29 2026 Rahul Rajesh <rrajesh@redhat.com> - 2.2.61-2
 - Fix copy-mac-from failing when source interface is down. RHEL-214096
 
